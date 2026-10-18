@@ -4,6 +4,7 @@ $script:__pass = 0
 $script:__fail = 0
 
 function Assert-Equal($Expected, $Actual, $Label) {
+    # Intentional string coercion: everything is compared as text (lightweight harness contract).
     if ("$Expected" -ne "$Actual") {
         $script:__fail++
         Write-Host "  FAIL ${Label}: expected [$Expected] actual [$Actual]" -ForegroundColor Red
@@ -24,6 +25,11 @@ function Assert-True($Condition, $Label) {
 }
 
 function Assert-FileContains([string]$Path, [string]$Needle, $Label) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        $script:__fail++
+        Write-Host "  FAIL ${Label}: file not found [$Path]" -ForegroundColor Red
+        return
+    }
     $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
     Assert-True ($content -match [regex]::Escape($Needle)) $Label
 }

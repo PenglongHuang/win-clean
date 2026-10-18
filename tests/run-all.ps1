@@ -10,9 +10,10 @@ foreach ($t in $tests) {
         if ($LASTEXITCODE -ne 0) { Write-Host "SUITE ABORTED at $t" -ForegroundColor Red; exit 1 }
     }
 }
-if (Get-Command node -ErrorAction SilentlyContinue) {
+$js = Join-Path $PSScriptRoot 'test-app.js'
+if ((Test-Path $js) -and (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "`n>>> test-app.js" -ForegroundColor Yellow
-    & node (Join-Path $PSScriptRoot 'test-app.js')
-    if ($LASTEXITCODE -ne 0) { Write-Host 'node tests failed' -ForegroundColor Red; exit 1 }
+    & node $js
+    if ($LASTEXITCODE -ne 0) { Write-Host "SUITE ABORTED at test-app.js" -ForegroundColor Red; exit 1 }
 }
 Write-Host "`nALL TESTS PASSED" -ForegroundColor Green
