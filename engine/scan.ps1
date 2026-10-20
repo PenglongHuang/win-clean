@@ -84,16 +84,20 @@ $drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Ob
     [pscustomobject]@{ letter = $_.DeviceID; total = [uint64]$_.Size; free = [uint64]$_.FreeSpace }
 })
 
+# Stable schema: totalBytes must always be a number, never null/absent.
+$totalBytes = ($findings | Measure-Object -Property bytes -Sum).Sum
+if (-not $totalBytes) { $totalBytes = [int64]0 }
+
 $result = [pscustomobject]@{
     timestamp = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
     host      = $env:COMPUTERNAME
     drives    = $drives
     findings  = $findings
-    totalBytes = ($findings | Measure-Object -Property bytes -Sum).Sum
+    totalBytes = $totalBytes
     isAdmin   = $isAdmin
 }
 $dir = Split-Path -Parent $OutFile
 if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutFile -Encoding UTF8
-Write-Output ("SCAN OK: {0} findings, {1:N0} bytes" -f $findings.Count, $result.totalBytes)
+Write-Output ("SCAN OK: {0} findings, {1:N0} bytes" -f $findings.Count, $totalBytes)
 exit 0

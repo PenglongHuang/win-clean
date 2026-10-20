@@ -20,3 +20,6 @@ foreach ($f in $files) {
     $bytes = New-Object byte[] $f[1]
     [IO.File]::WriteAllBytes($f[0], $bytes)
 }
+# Junction inside pip\cache -> Temp: traversal must NOT follow reparse points
+# (pip-cache stays 3072; a broken traversal gives 3584 or loops forever).
+cmd /c mklink /J "$Root\Local\pip\cache\loop-junction" "$Root\Local\Temp" | Out-Null
