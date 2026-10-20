@@ -13,6 +13,12 @@ $stamp       = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile     = Join-Path $HistoryDir "execute-$stamp.jsonl"
 $quarRoot    = Join-Path $HistoryDir 'quarantine'
 $restoreFile = Join-Path $HistoryDir "restore-$stamp.ps1"
+if (Test-Path -LiteralPath $restoreFile) {
+    # same-second rerun: never overwrite an existing restore script (jsonl stays append-mode)
+    $n = 2
+    while (Test-Path -LiteralPath (Join-Path $HistoryDir ("restore-{0}-{1}.ps1" -f $stamp, $n))) { $n++ }
+    $restoreFile = Join-Path $HistoryDir ("restore-{0}-{1}.ps1" -f $stamp, $n)
+}
 
 function Write-Log([string]$Action, [string]$Id, [string]$Path, [int64]$Bytes, [string]$Result) {
     $line = [pscustomobject]@{
@@ -54,6 +60,8 @@ $drivesBefore = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
 
 $manifest = @()   # quarantine mapping for restore script
 $freed = [int64]0
+$errorCount = 0
+$refusedCount = 0
 foreach ($id in $wanted) {
     $f = $byId[$id]
     if (-not $f) { Write-Log 'skipped' $id '' 0 'id-not-in-scan'; continue }
@@ -70,6 +78,7 @@ foreach ($id in $wanted) {
         $target = [string]$p.expanded
         if (Test-ProtectedPath $target) {
             Write-Log 'refused-protected' $id $target $p.bytes 'blocked-by-protection'
+            $refusedCount++
             continue
         }
         try {
@@ -94,9 +103,19 @@ foreach ($id in $wanted) {
                 $destDir = Join-Path $quarRoot ($safeId + '_' + [Guid]::NewGuid().ToString('N').Substring(0,8))
                 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
                 $dest = Join-Path $destDir (Split-Path -Leaf $target)
-                Move-Item -LiteralPath $target -Destination $dest -Force -ErrorAction Stop
+                # .NET Move is literal for BOTH arguments (Move-Item can glob-parse the
+                # destination leaf); file vs dir picked via the $item already resolved.
+                try {
+                    if ($item.PSIsContainer) { [IO.Directory]::Move($target, $dest) }
+                    else { [IO.File]::Move($target, $dest) }
+                } catch {
+                    # leave no freshly-created empty quarantine dir behind; recursive:$false
+                    # only removes it when empty, so a colliding dir's content survives
+                    try { [IO.Directory]::Delete($destDir, $false) } catch { }
+                    throw
+                }
                 $manifest += @{ quar = $dest; original = $target }
-                Write-Log 'quarantined' $id $target $p.bytes 'restorable'
+                Write-Log 'quarantined' $id $target $p.bytes ('restorable -> ' + $dest)
                 $freed += [int64]$p.bytes
             }
             else {
@@ -104,6 +123,7 @@ foreach ($id in $wanted) {
             }
         } catch {
             Write-Log 'error' $id $target $p.bytes ([string]$_.Exception.Message)
+            $errorCount++
         }
     }
 }
@@ -121,13 +141,25 @@ if (-not $DryRun) {
 $manifestJson
 '@
 `$moves = ConvertFrom-Json `$movesJson
+`$restored = 0; `$failed = 0
 foreach (`$m in @(`$moves)) {
     if (`$null -eq `$m) { continue }
-    `$parent = Split-Path -Parent `$m.original
-    if (-not (Test-Path -LiteralPath `$parent)) { New-Item -ItemType Directory -Path `$parent -Force | Out-Null }
-    Move-Item -LiteralPath `$m.quar -Destination `$m.original -Force
-    Write-Output ("restored: " + `$m.original)
+    try {
+        `$parent = Split-Path -Parent `$m.original
+        if (-not (Test-Path -LiteralPath `$parent)) { New-Item -ItemType Directory -Path `$parent -Force | Out-Null }
+        # .NET Move: literal paths both ways (bracket-safe); also refuses to overwrite
+        # a file the user may have re-created since quarantine - stays restorable instead.
+        if ((Get-Item -LiteralPath `$m.quar -Force).PSIsContainer) { [IO.Directory]::Move(`$m.quar, `$m.original) }
+        else { [IO.File]::Move(`$m.quar, `$m.original) }
+        Write-Output ("restored: " + `$m.original)
+        `$restored++
+    } catch {
+        `$failed++
+        Write-Output ("FAILED: " + `$m.original + " - " + `$_.Exception.Message)
+    }
 }
+if (`$restored -eq 0 -and `$failed -gt 0) { exit 1 }
+exit 0
 "@
     Set-Content -LiteralPath $restoreFile -Value $restoreBody -Encoding UTF8
 
@@ -145,6 +177,7 @@ $drivesAfter = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' |
 $summary = [pscustomobject]@{
     stamp = $stamp; dryRun = [bool]$DryRun
     freedBytes = $freed
+    errorCount = $errorCount; refusedCount = $refusedCount
     drivesBefore = @($drivesBefore); drivesAfter = @($drivesAfter)
     logFile = $logFile
     restoreFile = if ($DryRun) { $null } else { $restoreFile }
