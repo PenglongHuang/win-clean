@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>win-clean · 磁盘清理报告</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#14161f; color:#cfd3dc; }
+  header { padding:14px 20px; background:#1b1e2b; border-bottom:1px solid #2a2e3d; display:flex; gap:16px; align-items:baseline; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:#8a8f9e; font-size:12px; }
+  main { padding:16px 20px; max-width:1100px; margin:0 auto; }
+  .stats { display:flex; gap:10px; margin-bottom:14px; }
+  .stat { flex:1; background:#1e2230; border-radius:8px; padding:12px; text-align:center; }
+  .stat b { font-size:22px; display:block; color:#5dd18b; }
+  .stat span { font-size:12px; color:#8a8f9e; }
+  .drive-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+  .drive-row .drive-track { flex:1; height:8px; background:#2a2e3d; border-radius:4px; overflow:hidden; }
+  .drive-row .drive-fill { height:100%; }
+  #treemap { position:relative; height:420px; background:#1a1d29; border-radius:8px; overflow:hidden; margin-bottom:14px; }
+  .tm-cell { position:absolute; border:1px solid #14161f; box-sizing:border-box; padding:4px; overflow:hidden; cursor:pointer; }
+  .tm-cell:hover { outline:2px solid #fff; }
+  .tm-name { font-size:12px; font-weight:600; color:#10131a; }
+  .tm-size { font-size:11px; color:#10131a; opacity:.8; }
+  .lv-group { background:#1e2230; border-radius:6px; padding:8px 10px; margin-bottom:10px; }
+  .lv-head { font-size:13px; font-weight:600; margin-bottom:6px; }
+  .lv-policy { float:right; font-size:11px; color:#8a8f9e; font-weight:400; }
+  .lv-item { display:flex; gap:10px; align-items:center; padding:4px 0; font-size:13px; border-top:1px solid #2a2e3d; }
+  .lv-item .lv-bytes { margin-left:auto; color:#5dd18b; }
+  .lv-item a { color:#6aa3e8; font-size:12px; }
+  #detail { display:none; background:#1e2230; border-radius:8px; padding:12px 16px; margin:12px 0; }
+  #detail pre { background:#14161f; padding:8px; border-radius:6px; font-size:11px; overflow:auto; }
+  #detail .warn { color:#e0c55d; }
+  footer { position:fixed; bottom:0; left:0; right:0; background:#1b1e2b; border-top:1px solid #2a2e3d;
+    padding:10px 20px; display:flex; gap:14px; align-items:center; }
+  footer b { color:#5dd18b; font-size:16px; }
+  #submit-btn { background:#3fbf7f; color:#0f1117; border:0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  #submit-btn:hover { background:#4ed38d; }
+  #submit-result pre { user-select:all; background:#14161f; padding:8px; max-width:640px; overflow:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧹 win-clean 清理报告</h1>
+  <span class="sub" id="scan-ts"></span>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><b id="stat-releasable">—</b><span>可释放总量</span></div>
+    <div class="stat"><b id="stat-count">—</b><span>扫描发现项</span></div>
+    <div class="stat" style="flex:2; text-align:left; padding:10px 14px;"><div id="drive-bars"></div></div>
+  </div>
+  <div id="treemap"></div>
+  <div id="level-list"></div>
+  <div id="detail"></div>
+</main>
+<footer>
+  <span>已选 <b id="sel-count">0 项</b></span>
+  <span>合计 <b id="sel-bytes">0 B</b></span>
+  <button id="submit-btn">提交清理</button>
+  <span id="submit-result"></span>
+</footer>
+<script>
+window.SCAN_DATA = /*__SCAN_DATA__*/null;
+window.SERVE_MODE = /*__MODE__*/'auto';
+window.HISTORY = /*__HISTORY__*/null;
+</script>
+<script src="app.js"></script>
+</body>
+</html>
