@@ -28,6 +28,18 @@ function Write-Log([string]$Action, [string]$Id, [string]$Path, [int64]$Bytes, [
     Add-Content -LiteralPath $logFile -Value ($line | ConvertTo-Json -Compress) -Encoding UTF8
 }
 
+function Get-TreeStats([string]$Path) {
+    # Recursive file count + byte sum for copy verification. Reparse points are
+    # counted as zero (never followed), matching the scan engine's semantics.
+    $files = 0; $bytes = [int64]0
+    foreach ($e in (Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue)) {
+        if (-not $e.PSIsContainer -and -not ($e.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            $files++; $bytes += [int64]$e.Length
+        }
+    }
+    return @{ files = $files; bytes = $bytes }
+}
+
 # Roots that must never be deleted themselves. Rules may clean INSIDE them
 # (e.g. %LOCALAPPDATA%\Temp lives under Users), but the roots are off-limits.
 $script:ProtectedRoots = @(
@@ -103,11 +115,31 @@ foreach ($id in $wanted) {
                 $destDir = Join-Path $quarRoot ($safeId + '_' + [Guid]::NewGuid().ToString('N').Substring(0,8))
                 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
                 $dest = Join-Path $destDir (Split-Path -Leaf $target)
-                # .NET Move is literal for BOTH arguments (Move-Item can glob-parse the
-                # destination leaf); file vs dir picked via the $item already resolved.
                 try {
-                    if ($item.PSIsContainer) { [IO.Directory]::Move($target, $dest) }
-                    else { [IO.File]::Move($target, $dest) }
+                    if ([IO.Path]::GetPathRoot($target) -eq [IO.Path]::GetPathRoot($dest)) {
+                        # same volume: .NET Move is literal for BOTH arguments (Move-Item
+                        # can glob-parse the destination leaf); dir vs file via $item.
+                        if ($item.PSIsContainer) { [IO.Directory]::Move($target, $dest) }
+                        else { [IO.File]::Move($target, $dest) }
+                        $result = 'restorable -> ' + $dest
+                    }
+                    else {
+                        # cross-volume: .NET Move cannot leave the volume. Literal copy
+                        # INTO destDir (the new leaf keeps the literal source name),
+                        # verify file count + byte sum, and only then delete the source.
+                        Copy-Item -LiteralPath $target -Destination $destDir -Recurse -Force -ErrorAction Stop
+                        $srcStats = Get-TreeStats $target
+                        $dstStats = Get-TreeStats $dest
+                        if (($srcStats.files -ne $dstStats.files) -or ($srcStats.bytes -ne $dstStats.bytes)) {
+                            Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+                            try { [IO.Directory]::Delete($destDir, $false) } catch { }
+                            Write-Log 'error' $id $target $p.bytes 'copy-verify-failed'
+                            $errorCount++
+                            continue
+                        }
+                        Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+                        $result = 'restorable(copied) -> ' + $dest
+                    }
                 } catch {
                     # leave no freshly-created empty quarantine dir behind; recursive:$false
                     # only removes it when empty, so a colliding dir's content survives
@@ -115,7 +147,7 @@ foreach ($id in $wanted) {
                     throw
                 }
                 $manifest += @{ quar = $dest; original = $target }
-                Write-Log 'quarantined' $id $target $p.bytes ('restorable -> ' + $dest)
+                Write-Log 'quarantined' $id $target $p.bytes $result
                 $freed += [int64]$p.bytes
             }
             else {
@@ -142,15 +174,34 @@ $manifestJson
 '@
 `$moves = ConvertFrom-Json `$movesJson
 `$restored = 0; `$failed = 0
+function Get-Stats([string]`$Path) {
+    `$files = 0; `$bytes = [int64]0
+    foreach (`$e in (Get-ChildItem -LiteralPath `$Path -Recurse -Force -ErrorAction SilentlyContinue)) {
+        if (-not `$e.PSIsContainer -and -not (`$e.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            `$files++; `$bytes += [int64]`$e.Length
+        }
+    }
+    return @{ files = `$files; bytes = `$bytes }
+}
 foreach (`$m in @(`$moves)) {
     if (`$null -eq `$m) { continue }
     try {
         `$parent = Split-Path -Parent `$m.original
         if (-not (Test-Path -LiteralPath `$parent)) { New-Item -ItemType Directory -Path `$parent -Force | Out-Null }
-        # .NET Move: literal paths both ways (bracket-safe); also refuses to overwrite
-        # a file the user may have re-created since quarantine - stays restorable instead.
-        if ((Get-Item -LiteralPath `$m.quar -Force).PSIsContainer) { [IO.Directory]::Move(`$m.quar, `$m.original) }
-        else { [IO.File]::Move(`$m.quar, `$m.original) }
+        if ([IO.Path]::GetPathRoot(`$m.quar) -eq [IO.Path]::GetPathRoot(`$m.original)) {
+            # same volume: literal .NET Move (bracket-safe); also refuses to overwrite
+            # a file the user may have re-created since quarantine - stays restorable.
+            if ((Get-Item -LiteralPath `$m.quar -Force).PSIsContainer) { [IO.Directory]::Move(`$m.quar, `$m.original) }
+            else { [IO.File]::Move(`$m.quar, `$m.original) }
+        }
+        else {
+            # cross-volume: literal copy into the parent dir, verify, then delete the copy.
+            if (Test-Path -LiteralPath `$m.original) { throw ('refusing overwrite: ' + `$m.original) }
+            Copy-Item -LiteralPath `$m.quar -Destination `$parent -Recurse -Force -ErrorAction Stop
+            `$s = Get-Stats `$m.quar; `$d = Get-Stats `$m.original
+            if ((`$s.files -ne `$d.files) -or (`$s.bytes -ne `$d.bytes)) { throw ('copy-verify-failed: ' + `$m.original) }
+            Remove-Item -LiteralPath `$m.quar -Recurse -Force -ErrorAction Stop
+        }
         Write-Output ("restored: " + `$m.original)
         `$restored++
     } catch {

@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path $PSScriptRoot '..'
 $fx = Join-Path $env:TEMP ("wc-exec-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 $hist = Join-Path $fx 'history'
+$xv = $null   # cross-volume fixture root (set only when a second local drive exists)
 New-Item -ItemType Directory -Path "$fx\targets\perm\sub", "$fx\targets\quar", "$fx\targets\admin" -Force | Out-Null
 [IO.Directory]::CreateDirectory("$fx\targets\quar[1]") | Out-Null   # bracket leaf: pins wildcard-safety
 [IO.File]::WriteAllBytes("$fx\targets\perm\sub\f.bin", (New-Object byte[] 100))
@@ -88,7 +89,42 @@ try {
     Assert-Equal 0 $LASTEXITCODE 'restore script exits 0'
     Assert-True (Test-Path "$fx\targets\quar\g.bin")  'restore brought file back'
     Assert-True (Test-Path -LiteralPath "$fx\targets\quar[1]\h.bin") 'restore brought quar2 file back'
+
+    # -- cross-volume quarantine: recycle-bin target on another local drive -> copy+verify+delete path
+    $other = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object { $_.DeviceID }) |
+        Where-Object { ([IO.Path]::GetPathRoot($_ + '\')) -ne [IO.Path]::GetPathRoot($fx) } | Select-Object -First 1
+    if ($other) {
+        $xv = Join-Path $other ("wc-xvol-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
+        $xvHist = Join-Path $fx 'history2'
+        [IO.Directory]::CreateDirectory("$xv\t\sub") | Out-Null
+        [IO.File]::WriteAllBytes("$xv\t\k.bin", (New-Object byte[] 123))
+        [IO.File]::WriteAllBytes("$xv\t\sub\m.bin", (New-Object byte[] 77))
+        $xvScan = [pscustomobject]@{ findings = @(
+            [pscustomobject]@{ id='xvol-rule'; level=3; name='xv'; type='cache'; strategy='recycle-bin'; desc=''; auto_select=$false; source='builtin'; bytes=200; needs_admin=$false
+                paths=@(@{path='XV';expanded="$xv\t";exists=$true;bytes=200}) } ) }
+        $xvScanFile = "$fx\xv-scan.json"; $xvSelFile = "$fx\xv-sel.json"
+        $xvScan | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $xvScanFile -Encoding UTF8
+        '{"ids":["xvol-rule"]}' | Set-Content -LiteralPath $xvSelFile -Encoding UTF8
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'engine\execute.ps1') `
+            -ScanFile $xvScanFile -SelectionsFile $xvSelFile -HistoryDir $xvHist | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'xvol execute exits 0'
+        Assert-True (-not (Test-Path -LiteralPath "$xv\t")) 'xvol source gone (cross-volume)'
+        $xvLog = (Get-ChildItem "$xvHist\*.jsonl" | ForEach-Object { Get-Content $_ -Raw -Encoding UTF8 }) -join "`n"
+        Assert-True ($xvLog -match 'restorable\(copied\)') 'xvol audit: restorable(copied)'
+        $xvQuar = Get-ChildItem "$xvHist\quarantine\xvol-rule_*" -Directory | Select-Object -First 1
+        Assert-True ($null -ne $xvQuar) 'xvol quarantine dir exists'
+        $xvSum = (Get-ChildItem -LiteralPath $xvQuar.FullName -Recurse -File | Measure-Object -Property Length -Sum).Sum
+        Assert-Equal 200 $xvSum 'xvol quarantine byte sum matches'
+        $xvRestore = Get-ChildItem "$xvHist\restore-*.ps1" | Select-Object -First 1
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $xvRestore.FullName | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'xvol restore exits 0'
+        $xvBack = (Get-ChildItem -LiteralPath "$xv\t" -Recurse -File | Measure-Object -Property Length -Sum).Sum
+        Assert-Equal 200 $xvBack 'xvol restored byte sum matches'
+    } else {
+        Assert-True $true 'xvol scenario skipped (single-volume machine)'
+    }
 } finally {
+    if ($xv) { Remove-Item -Recurse -Force $xv -ErrorAction SilentlyContinue }
     Remove-Item -Recurse -Force $fx -ErrorAction SilentlyContinue
 }
 Get-TestSummary 'test-execute'
