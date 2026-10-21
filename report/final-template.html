@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>win-clean · 清理完成报告</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#14161f; color:#cfd3dc; }
+  header { padding:14px 20px; background:#1b1e2b; border-bottom:1px solid #2a2e3d; }
+  header h1 { font-size:18px; margin:0 0 4px; }
+  header .sub { color:#8a8f9e; font-size:12px; }
+  main { padding:16px 20px; max-width:1000px; margin:0 auto; }
+  .stats { display:flex; gap:10px; margin-bottom:14px; }
+  .stat { flex:1; background:#1e2230; border-radius:8px; padding:12px; text-align:center; }
+  .stat b { font-size:24px; display:block; color:#5dd18b; }
+  .stat span { font-size:12px; color:#8a8f9e; }
+  .panel { background:#1e2230; border-radius:8px; padding:12px 16px; margin-bottom:12px; }
+  .panel h3 { margin:0 0 8px; font-size:14px; }
+  .bar-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+  .bar-row .track { flex:1; height:10px; background:#2a2e3d; border-radius:5px; overflow:hidden; position:relative; }
+  .bar-row .before { height:100%; background:#e0a55d; float:left; }
+  .bar-row .freed { position:absolute; top:0; right:0; height:100%; background:#5dd18b; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  td, th { padding:5px 8px; border-bottom:1px solid #2a2e3d; text-align:left; }
+  .num { text-align:right; color:#5dd18b; }
+  .warn { color:#e0c55d; }
+  .session-row { display:flex; gap:12px; padding:6px 0; border-bottom:1px solid #2a2e3d; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧹 win-clean 清理完成报告</h1>
+  <div class="sub" id="hd-sub"></div>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><b id="st-freed">—</b><span>本次释放</span></div>
+    <div class="stat"><b id="st-total">—</b><span>累计释放</span></div>
+    <div class="stat"><b id="st-count">—</b><span>处理项</span></div>
+  </div>
+  <div class="panel"><h3>磁盘前后对比（橙=清理前占用，绿=释放）</h3><div id="drive-compare"></div></div>
+  <div class="panel"><h3>分类战绩（按等级）</h3><div id="by-level"></div></div>
+  <div class="panel"><h3>恢复与提示</h3><div id="notes" class="warn"></div></div>
+  <div class="panel"><h3>历史会话</h3><div id="history"></div></div>
+</main>
+<script>
+window.FINAL_DATA = /*__FINAL_DATA__*/null;
+window.HISTORY_INDEX = /*__HISTORY__*/null;
+</script>
+<script src="app.js"></script>
+<script>
+(function () {
+  var d = window.FINAL_DATA, hist = window.HISTORY_INDEX;
+  if (!d) return;
+  var drivesAfter = [].concat(d.drivesAfter || []), drivesBefore = [].concat(d.drivesBefore || []);
+  var findings = [].concat(d.findings || []);
+  var sessions = [].concat((hist && hist.sessions) || []).slice().reverse();
+  document.getElementById('hd-sub').textContent = d.stamp + ' · ' + (d.dryRun ? '演练模式' : '实际执行');
+  document.getElementById('st-freed').textContent = fmtBytes(d.freedBytes);
+  document.getElementById('st-total').textContent = fmtBytes((hist && hist.totalFreed) || d.freedBytes);
+  document.getElementById('st-count').textContent = findings.length + ' 项';
+
+  var cmp = '';
+  drivesAfter.forEach(function (a) {
+    var b = drivesBefore.filter(function (x) { return x.letter === a.letter; })[0];
+    if (!b || !a.total) return;
+    var usedB = a.total - b.free, usedA = a.total - a.free;
+    var pctB = Math.round(usedB / a.total * 100), pctA = Math.round(usedA / a.total * 100);
+    var freedPct = Math.max(0, Math.round((b.free - a.free) / a.total * 100));
+    cmp += '<div class="bar-row"><span style="width:32px">' + a.letter + '</span>' +
+      '<div class="track"><div class="freed" style="width:' + freedPct + '%"></div>' +
+      '<div class="before" style="width:' + Math.min(pctB, 100 - freedPct) + '%"></div></div>' +
+      '<span>' + pctB + '% → ' + pctA + '%</span></div>';
+  });
+  document.getElementById('drive-compare').innerHTML = cmp;
+
+  var rows = '<table><tr><th>等级</th><th>名称</th><th class="num">大小</th><th>结果</th></tr>';
+  findings.forEach(function (f) {
+    var m = LEVELS[f.level] || { icon: '?', name: '' };
+    rows += '<tr><td>' + m.icon + ' L' + f.level + ' ' + m.name + '</td><td>' + f.name +
+      '</td><td class="num">' + fmtBytes(f.bytes) + '</td><td>' + (f.outcome || '') + '</td></tr>';
+  });
+  rows += '</table>';
+  document.getElementById('by-level').innerHTML = rows;
+
+  document.getElementById('notes').innerHTML =
+    '恢复脚本：<code>' + (d.restoreFile || '无（无可恢复项）') + '</code><br>' +
+    '审计日志：<code>' + (d.logFile || '—') + '</code>' +
+    (d.dryRun ? '<br>⚠ 本次为演练，未实际删除' : '');
+
+  var h = '';
+  sessions.forEach(function (s) {
+    h += '<div class="session-row"><span>📅 ' + s.dir + '</span><span class="num">' + fmtBytes(s.freedBytes) +
+      '</span><span>' + s.reportPath + '</span></div>';
+  });
+  document.getElementById('history').innerHTML = h || '<div class="session-row">首次会话</div>';
+})();
+</script>
+</body>
+</html>
