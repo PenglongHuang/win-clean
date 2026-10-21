@@ -52,5 +52,14 @@ $idx2 = Get-Content "$hist\index.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-Equal 2 @($idx2.sessions).Count 'second session appended'
 Assert-Equal 11992 $idx2.totalFreed 'cumulative total updated'
 
+# -- corrupt index.json: must fall back to a fresh index, not die
+Set-Content -LiteralPath "$hist\index.json" -Value '{oops' -Encoding UTF8
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'engine\report-gen.ps1') `
+    -ScanFile $scanFile -ExecSummaryFile $sumFile -SessionDir "$hist\2026-10-19_0900" -HistoryRoot $hist | Out-Null
+Assert-Equal 0 $LASTEXITCODE 'report-gen survives corrupt index'
+$idx3 = Get-Content "$hist\index.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-Equal 1 @($idx3.sessions).Count 'corrupt index reset to 1 session'
+Assert-Equal 5996 $idx3.totalFreed 'fresh total after corruption'
+
 Remove-Item -Recurse -Force $fx
 Get-TestSummary 'test-report-gen'

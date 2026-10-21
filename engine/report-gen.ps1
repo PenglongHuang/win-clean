@@ -62,8 +62,14 @@ $finalData = [pscustomobject]@{
 $idxPath = Join-Path $HistoryRoot 'index.json'
 $idx = [pscustomobject]@{ sessions = @(); totalFreed = [int64]0 }
 if (Test-Path $idxPath) {
-    $old = Get-Content -LiteralPath $idxPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($old) { $idx = $old }
+    # corrupt/invalid JSON falls back to the fresh default above so one bad
+    # file cannot permanently brick history (worst case: totals restart)
+    try {
+        $old = Get-Content -LiteralPath $idxPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($old) { $idx = $old }
+    } catch {
+        Write-Warning "history index unreadable, starting fresh: $idxPath"
+    }
 }
 $reportPath = Join-Path $SessionDir 'final-report.html'
 $sessions = @($idx.sessions) + @(
@@ -77,9 +83,10 @@ $sessions = @($idx.sessions) + @(
 $totalFreed = [int64]0
 foreach ($s in $sessions) { $totalFreed += [int64]$s.freedBytes }
 $newIdx = [pscustomobject]@{ sessions = $sessions; totalFreed = $totalFreed }
-$newIdx | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $idxPath -Encoding UTF8
 
 # render: inject data + inline app.js for self-contained file
+# (report is rendered and written BEFORE the index, so a render failure cannot
+# leave a phantom session whose reportPath is dead and whose bytes inflate totals)
 $tplPath = Join-Path $PSScriptRoot '..\report\final-template.html'
 $appJsPath = Join-Path $PSScriptRoot '..\report\app.js'
 $html = Get-Content -LiteralPath $tplPath -Raw -Encoding UTF8
@@ -88,5 +95,7 @@ $html = $html.Replace('/*__HISTORY__*/null', ($newIdx | ConvertTo-Json -Depth 5)
 $inline = Get-Content -LiteralPath $appJsPath -Raw -Encoding UTF8
 $html = $html.Replace('<script src="app.js"></script>', ("<script>`n" + $inline + "`n</script>"))
 $html | Set-Content -LiteralPath $reportPath -Encoding UTF8
+# index lands only after the report exists on disk (see ordering note above)
+$newIdx | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $idxPath -Encoding UTF8
 Write-Output "FINAL REPORT: $reportPath"
 exit 0
