@@ -1,3 +1,10 @@
+---
+描述: Windows 深度磁盘清理 Claude skill,规则快扫+Agent 探索双引擎,浏览器可视化勾选,五级安全模型
+提出: 2026-10-18
+阶段: active
+ingenuity: ../ingenuity.md
+---
+
 # win-clean
 
 Claude Code skill：Windows 深度磁盘清理。规则快扫 + Agent 探索双引擎，
@@ -22,8 +29,8 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 | L1 | pip/npm/conda 等可再生缓存 | 直接删 |
 | L2 | Temp/转储/更新缓存 | 直接删 |
 | L3 | 应用缓存（微信等） | 移入可恢复区（30天） |
-| L4 | 卸载残留/深度发现 | 移入可恢复区，逐项确认 |
-| L5 | Windows.old/WinSxS/休眠 | 仅报告命令，不执行 |
+| L4 | 卸载残留/深度发现/休眠文件 | 移入可恢复区，逐项确认（休眠文件 report-only） |
+| L5 | Windows.old/WinSxS 等系统级 | 仅报告命令，不执行 |
 
 - 每次执行产出审计日志（jsonl）与一键恢复脚本
 - 硬编码保护清单（Windows/Program Files/用户目录根）不可越过

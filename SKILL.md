@@ -47,40 +47,37 @@ B. Agent 探索（仅深度档）— 像专家一样狩猎，规则库外的目�
 4. 每个发现向用户播报："发现 X（大小，路径，判断依据，建议等级）"
 5. 用户同意后沉淀：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -RulesDir "$sk\rules" `
-  -Id <kebab-id> -Level <1-5> -Name "<名>" -Paths "<绝对路径>" -Type <cache|temp|leftover|installer|log|dump|system> -Desc "<判断依据>"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -RulesDir "$sk\rules" -Id <kebab-id> -Level <1-5> -Name "<名>" -Paths "<绝对路径>" -Type <cache|temp|leftover|installer|log|dump|system> -Desc "<判断依据>"
 ```
 沉淀后重跑快扫，新规则即入报告。
 
 ## 阶段③ 报告与勾选
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" `
-  -ScanFile "$sk\logs\scan-result.json" -SelectionsOut "$sk\logs\selections.json" `
-  -HistoryIndex "$sk\logs\history\index.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$sk\logs\scan-result.json" -SelectionsOut "$sk\logs\selections.json" -HistoryIndex "$sk\logs\history\index.json"
 ```
-（后台启动）读 `"$sk\logs\serve-info.json"` 拿 URL，让用户在浏览器打开并勾选。
-轮询 `"$sk\logs\selections.json"` 出现（最多 15 分钟）。
+用后台方式启动（如 Bash run_in_background），等待 `"$sk\logs\serve-info.json"` 出现后读取 URL，
+让用户在浏览器打开并勾选。轮询 `"$sk\logs\selections.json"` 出现（最多 15 分钟）。
+超时未提交 → 读取 serve-info.json 的 pid 并 `Stop-Process -Id <pid>`，询问用户取消还是降级静态模式。
 
 降级：服务起不来 → `-Static -OutHtml "$sk\logs\report.html"`，用户在页面"提交清理"处
-复制命令回终端执行，得到 selections.json 后走阶段④。
+复制命令回终端执行。用户执行复制命令后，把 `$env:TEMP\win-clean-selection.json`
+复制为 `"$sk\logs\selections.json"` 再进入阶段④。
 
 ## 阶段④ 执行
 
 ```
 $d = Join-Path "$sk\logs" ("history/" + (Get-Date -Format 'yyyy-MM-dd_HHmm'))
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\execute.ps1" `
-  -ScanFile "$sk\logs\scan-result.json" -SelectionsFile "$sk\logs\selections.json" -HistoryDir $d
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\execute.ps1" -ScanFile "$sk\logs\scan-result.json" -SelectionsFile "$sk\logs\selections.json" -HistoryDir $d
 ```
 先给用户看 freedBytes 预估（可用 -DryRun 演练）。需要管理员的项在报告里给命令。
 
 ## 阶段⑤ 最终报告
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" `
-  -ScanFile "$sk\logs\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') `
-  -SessionDir $d -HistoryRoot "$sk\logs\history"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" -ScanFile "$sk\logs\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') -SessionDir $d -HistoryRoot "$sk\logs\history"
 ```
+若阶段⑤在新会话执行，先重算 `$d = Get-ChildItem "$sk\logs\history" -Directory | Sort-Object Name -Last 1`，或与阶段④同一会话执行。
 用浏览器打开 `<$d>/final-report.html`，向用户播报释放量、前后对比、恢复脚本位置、
 被跳过/需管理员项、累计战绩。提醒：可恢复区文件 30 天后自动清除。
 
