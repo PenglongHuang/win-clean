@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>win-clean · 设计原型 v4</title>
+<style>
+/* ============ 设计变量 ============ */
+:root {
+  --bg: #0b0d13;
+  --ink-1: #eef1f6; --ink-2: #a6adbb; --ink-3: #7c8494;
+  --glass: rgba(255,255,255,.055); --glass-strong: rgba(255,255,255,.09);
+  --line: rgba(255,255,255,.09);
+  --radius: 16px;
+  --l1: #199e70; --l1-soft: rgba(25,158,112,.16);
+  --l2: #c98500; --l2-soft: rgba(201,133,0,.16);
+  --l3: #a64b1c; --l3-soft: rgba(166,75,28,.18);
+  --l4: #e66767; --l4-soft: rgba(230,103,103,.15);
+  --l5: #3987e5; --l5-soft: rgba(57,135,229,.15);
+  --good: #199e70; --warn: #c98500; --bad: #e66767;
+  --ease-out: cubic-bezier(.22,.9,.36,1);
+  --dur: .55s;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; color: var(--ink-1);
+  font-family: "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  background: var(--bg); min-height: 100vh; overflow-x: hidden; padding-bottom: 110px;
+}
+.aurora { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.aurora::before, .aurora::after { content: ""; position: absolute; border-radius: 50%; filter: blur(90px); }
+.aurora::before { width: 60vw; height: 60vw; left: -12vw; top: -22vw; background: radial-gradient(circle, rgba(25,158,112,.17), transparent 65%); animation: drift 26s ease-in-out infinite alternate; }
+.aurora::after  { width: 55vw; height: 55vw; right: -15vw; top: -8vw;  background: radial-gradient(circle, rgba(57,135,229,.15), transparent 65%); animation: drift 32s ease-in-out infinite alternate-reverse; }
+.aurora .b3 { position: absolute; width: 50vw; height: 50vw; left: 30vw; bottom: -30vw; border-radius: 50%; filter: blur(100px);
+  background: radial-gradient(circle, rgba(144,133,233,.10), transparent 65%); animation: drift 38s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(6vw,4vh) scale(1.12); } }
+
+.glass {
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius);
+  backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  box-shadow: 0 10px 34px rgba(0,0,0,.35);
+}
+@supports not (backdrop-filter: blur(1px)) { .glass { background: rgba(24,27,36,.92); } }
+
+.rise { opacity: 0; transform: translateY(18px); animation: rise var(--dur) var(--ease-out) forwards; animation-delay: calc(var(--i,0) * 90ms); }
+@keyframes rise { to { opacity: 1; transform: none; } }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 22px 22px 0; }
+
+/* ============ 顶栏 ============ */
+.topbar { display: flex; align-items: center; gap: 14px; padding: 14px 18px; position: sticky; top: 14px; z-index: 20; background: rgba(13,16,23,.82); }
+.brand { font-size: 17px; font-weight: 650; letter-spacing: .2px; display: flex; align-items: center; gap: 9px; }
+.brand .dot { width: 9px; height: 9px; border-radius: 50%; background: linear-gradient(135deg,#2dd4a0,#3987e5); box-shadow: 0 0 12px rgba(45,212,160,.8); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 4px rgba(45,212,160,.4); } }
+.topbar .sub { color: var(--ink-3); font-size: 12.5px; }
+.chip { margin-left: auto; font-size: 12px; color: var(--ink-2); border: 1px solid var(--line); padding: 4px 11px; border-radius: 99px; background: rgba(255,255,255,.04); }
+
+/* ============ 首屏指标 ============ */
+.hero { display: grid; grid-template-columns: 1.1fr .9fr 1.4fr; gap: 14px; margin-top: 16px; }
+.stat { padding: 18px 20px 15px; position: relative; overflow: hidden; }
+.stat .kpi { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .3px; line-height: 1.15; }
+.stat .kpi small { font-size: 16px; font-weight: 600; color: var(--ink-2); margin-left: 2px; }
+.stat .cap { color: var(--ink-2); font-size: 12.5px; margin-top: 3px; }
+.stat .spark { position: absolute; right: 14px; top: 14px; font-size: 17px; opacity: .85; }
+.stat.green .kpi { color: #4ed8a6; }
+.stat .footnote { color: var(--ink-3); font-size: 11.5px; margin-top: 8px; }
+.drives { padding: 16px 18px; display: flex; flex-direction: column; gap: 11px; }
+.drives h3 { margin: 0 0 2px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.drow { display: grid; grid-template-columns: 26px 1fr 118px; align-items: center; gap: 10px; font-size: 12.5px; cursor: pointer; border-radius: 8px; padding: 2px 4px; transition: background .18s; }
+.drow:hover { background: rgba(255,255,255,.05); }
+.drow .letter { font-weight: 700; }
+.track { height: 9px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.fill { height: 100%; border-radius: 99px; width: 0; transition: width 1s var(--ease-out); }
+.drow .note { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.drow.inactive { opacity: .5; }
+
+/* ============ 分段式磁盘 Tab ============ */
+.tabrow { display: flex; align-items: center; gap: 14px; margin: 24px 2px 12px; }
+.segtabs { position: relative; display: flex; gap: 2px; padding: 4px; border-radius: 99px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+.segtab { position: relative; z-index: 2; border: none; background: none; color: var(--ink-2); font-size: 13px; font-weight: 600;
+  padding: 8px 18px; border-radius: 99px; cursor: pointer; transition: color .25s; font-family: inherit; }
+.segtab:hover { color: var(--ink-1); }
+.segtab.on { color: #06251a; }
+.segtab .n { opacity: .75; font-weight: 500; font-size: 11.5px; margin-left: 3px; }
+.tab-pill { position: absolute; z-index: 1; top: 4px; bottom: 4px; border-radius: 99px;
+  background: linear-gradient(120deg, #2dd4a0, #1fa07a);
+  box-shadow: 0 4px 16px rgba(31,160,122,.4);
+  transition: left .35s var(--ease-out), width .35s var(--ease-out); }
+.tabrow .hint { color: var(--ink-3); font-size: 12px; }
+
+/* ============ 地图卡片 + 工具栏 ============ */
+.mapcard { padding: 18px; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.search { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.06);
+  border: 1px solid var(--line); border-radius: 99px; padding: 8px 14px; transition: border-color .2s, background .2s; }
+.search:focus-within { border-color: rgba(45,212,160,.55); background: rgba(255,255,255,.08); }
+.search input { flex: 1; background: none; border: none; outline: none; color: var(--ink-1); font-size: 13px; font-family: inherit; }
+.search input::placeholder { color: var(--ink-3); }
+.search .clr { border: none; background: none; color: var(--ink-3); cursor: pointer; font-size: 13px; padding: 0 2px; display: none; }
+.search.has .clr { display: block; }
+
+/* ============ 色带 ============ */
+.bands { display: flex; flex-direction: column; gap: 12px; }
+.band { border-radius: 14px; transition: background .25s; }
+.band.hot { background: rgba(255,255,255,.035); }
+.band-head { display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; user-select: none; border-radius: 10px; }
+.band-head:hover { background: rgba(255,255,255,.04); }
+.band-head .nm { font-size: 13.5px; font-weight: 650; flex: none; }
+.band-head .bytes { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; flex: none; }
+.band-head .selstat { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; transition: color .2s; flex: none; }
+.band-head .selstat.some { color: #4ed8a6; }
+.band-head .desc { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.band-head .grp-toggle { margin-left: auto; flex: none; font-size: 11.5px; color: #8fb6e8; border: 1px solid transparent;
+  border-radius: 99px; padding: 4px 12px; cursor: pointer; background: none; font-family: inherit; transition: all .18s; }
+.band-head .grp-toggle:hover { border-color: var(--line); background: rgba(255,255,255,.07); }
+.band-head .chev { color: var(--ink-3); font-size: 11px; transition: transform .3s var(--ease-out); }
+.band.open .chev { transform: rotate(180deg); }
+.band-body { position: relative; border-radius: 12px; background: rgba(255,255,255,.06); overflow: hidden;
+  transition: height .45s var(--ease-out); }
+.tm { position: relative; }
+.cell { position: absolute; border-radius: 8px; cursor: pointer; overflow: hidden;
+  transition: transform .18s var(--ease-out), filter .18s, box-shadow .25s, opacity .25s;
+  display: flex; flex-direction: column; justify-content: center; padding: 6px 9px; }
+.cell:hover { transform: translateY(-2px) scale(1.015); filter: brightness(1.22); z-index: 3; }
+.cell .nm { font-size: 12px; font-weight: 650; color: rgba(255,255,255,.97); text-shadow: 0 1px 2px rgba(0,0,0,.35); line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell .sz { font-size: 11px; color: rgba(255,255,255,.82); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell.off { opacity: .3; filter: saturate(.45); }
+.cell.on { box-shadow: 0 0 0 2px rgba(255,255,255,.75), 0 6px 22px rgba(0,0,0,.45); }
+.cell { opacity: 0; animation: cellIn .5s var(--ease-out) forwards; animation-delay: calc(120ms + var(--i,0) * 26ms); }
+@keyframes cellIn { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+.cell.off { animation-name: cellInOff; }
+@keyframes cellInOff { from { opacity: 0; } to { opacity: .3; } }
+.cell.fade { opacity: .08 !important; filter: saturate(.2); }
+/* 选中波纹 */
+@keyframes wave { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } }
+.cell.wave { animation: wave .5s ease-out; }
+
+/* 微小项 */
+.tinies { margin: 8px 6px 2px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3);
+  border: 1px dashed var(--line); border-radius: 99px; padding: 4px 12px; cursor: pointer; background: none; font-family: inherit;
+  transition: all .18s; }
+.tinies:hover { color: var(--ink-1); border-color: rgba(255,255,255,.25); }
+
+.tip { position: fixed; z-index: 60; pointer-events: none; padding: 8px 12px; border-radius: 10px;
+  background: rgba(16,19,27,.9); border: 1px solid var(--line); backdrop-filter: blur(14px);
+  font-size: 12px; color: var(--ink-1); box-shadow: 0 8px 26px rgba(0,0,0,.5);
+  opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; max-width: 260px; }
+.tip.show { opacity: 1; transform: none; }
+.tip b { display: block; margin-bottom: 2px; }
+.tip span { color: var(--ink-2); }
+
+/* L5 条 */
+.l5strip { margin-top: 14px; border-radius: 12px; border: 1px dashed rgba(57,135,229,.4); background: var(--l5-soft); padding: 12px 16px; }
+.l5strip .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.l5strip .big { font-weight: 650; font-variant-numeric: tabular-nums; color: #7db4f0; }
+.l5strip .exp { margin-left: auto; font-size: 12px; color: var(--ink-2); cursor: pointer; border: none; background: none; padding: 4px 8px; border-radius: 8px; transition: background .18s; }
+.l5strip .exp:hover { background: rgba(255,255,255,.08); }
+.l5strip .detail { max-height: 0; overflow: hidden; transition: max-height .45s var(--ease-out); }
+.l5strip.open .detail { max-height: 260px; }
+.l5strip .detail p { margin: 10px 2px 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.7; }
+.l5strip .detail code { background: rgba(0,0,0,.4); padding: 2px 7px; border-radius: 6px; font-size: 11.5px; color: #a8c8f0; }
+
+/* ============ 悬浮操作栏 ============ */
+.actionbar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 30;
+  display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 12px 14px 12px 22px; border-radius: 99px;
+  width: min(860px, calc(100vw - 40px)); }
+.actionbar .cnt { flex: none; }
+.actionbar .sep { flex: none; }
+/* 关键：.rise 结束帧是 transform:none，会冲掉 translateX(-50%) 居中导致整栏溢出屏幕 —— 操作栏用自己的入场动画 */
+.actionbar.rise { animation-name: riseBar; }
+@keyframes riseBar { from { opacity: 0; transform: translateX(-50%) translateY(24px); } to { opacity: 1; transform: translateX(-50%); } }
+.actionbar .cnt b { font-size: 16.5px; font-variant-numeric: tabular-nums; color: #4ed8a6; }
+.actionbar .cnt span { color: var(--ink-2); font-size: 12.5px; margin-left: 4px; }
+.actionbar .sep { width: 1px; height: 26px; background: var(--line); }
+.cta { position: relative; overflow: hidden; margin-left: auto; border: none; cursor: pointer;
+  padding: 12px 26px; border-radius: 99px; font-size: 14.5px; font-weight: 700; color: #052e1f;
+  background: linear-gradient(120deg, #27c690, #1fa07a);
+  box-shadow: 0 6px 22px rgba(31,160,122,.38); transition: transform .18s var(--ease-out), box-shadow .25s; font-family: inherit; }
+.cta:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(31,160,122,.5); }
+.cta:active { transform: translateY(0) scale(.97); }
+.cta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,.5) 50%, transparent 58%); transform: translateX(-120%); }
+.cta:hover::after { animation: sheen .9s ease; }
+@keyframes sheen { to { transform: translateX(120%); } }
+.cta.done { pointer-events: none; }
+.cta .ico { display: inline-block; transition: transform .3s cubic-bezier(.34,1.8,.5,1); }
+.cta:hover .ico { transform: translateX(3px); }
+
+/* ============ 模态框 ============ */
+.modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(5,7,11,.55);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: grid; place-items: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity .22s; }
+.modal-bg.open { opacity: 1; pointer-events: auto; }
+.modal { width: min(600px, 92vw); max-height: 82vh; overflow: auto; padding: 22px 24px;
+  transform: scale(.94) translateY(10px); transition: transform .26s var(--ease-out); }
+.modal-bg.open .modal { transform: none; }
+.modal h3 { margin: 0 0 6px; font-size: 16.5px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.modal .badge { font-size: 11.5px; padding: 3px 10px; border-radius: 99px; font-weight: 600; }
+.modal p { color: var(--ink-2); font-size: 13px; line-height: 1.75; }
+.modal pre { background: rgba(0,0,0,.45); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 11.5px; color: #9fb8d8; overflow: auto; }
+.x { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,.07); color: var(--ink-2); font-size: 14px; transition: background .18s, transform .18s; }
+.x:hover { background: rgba(255,255,255,.15); color: var(--ink-1); transform: rotate(90deg); }
+/* 模态框内的清单行 */
+.mrow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+.mrow .bytes { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12.5px; }
+.cbx { appearance: none; -webkit-appearance: none; width: 19px; height: 19px; border-radius: 6px;
+  border: 1.5px solid rgba(255,255,255,.28); background: rgba(255,255,255,.04); cursor: pointer;
+  display: inline-grid; place-content: center; transition: background .16s, border-color .16s, transform .12s; flex: none; }
+.cbx:hover { border-color: rgba(255,255,255,.5); transform: scale(1.08); }
+.cbx::after { content: "✓"; font-size: 12.5px; font-weight: 800; color: #06251a; transform: scale(0); transition: transform .18s cubic-bezier(.34,1.7,.5,1); }
+.cbx:checked { background: var(--gc, var(--l1)); border-color: transparent; }
+.cbx:checked::after { transform: scale(1); }
+.cbx:active { transform: scale(.9); }
+
+/* ============ Toast / 引导 ============ */
+.toast { position: fixed; top: 20px; left: 50%; transform: translate(-50%,-70px); z-index: 70;
+  padding: 12px 22px; border-radius: 14px; font-size: 13.5px; display: flex; gap: 10px; align-items: center;
+  opacity: 0; transition: transform .45s var(--ease-out), opacity .45s; }
+.toast.show { transform: translate(-50%,0); opacity: 1; }
+.guide { margin-top: 14px; padding: 10px 16px; font-size: 12.5px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.guide b { color: var(--ink-1); font-weight: 600; }
+.guide .no { margin-left: auto; background: none; border: none; color: var(--ink-3); cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 8px; }
+.guide .no:hover { background: rgba(255,255,255,.08); color: var(--ink-1); }
+footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin: 34px 0 10px; line-height: 1.8; }
+
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  body { padding-bottom: 178px; }
+  .actionbar { border-radius: 22px; }
+  .cta { flex: 1 1 auto; margin-left: 0; }
+  .band-head .desc { display: none; }
+  .tabrow { flex-wrap: wrap; }
+  .tabrow .hint { display: none; }
+  .segtab { padding: 8px 13px; font-size: 12.5px; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 16px 14px 0; }
+  .stat .kpi { font-size: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .rise, .cell { opacity: 1 !important; transform: none !important; }
+  /* 操作栏的居中靠 translateX(-50%)，不能被上面的 transform:none 冲掉 */
+  .actionbar.rise { transform: translateX(-50%) !important; }
+}
+</style>
+</head>
+<body>
+<div class="aurora"><div class="b3"></div></div>
+
+<div class="wrap">
+  <div class="topbar glass rise" style="--i:0">
+    <div class="brand"><span class="dot"></span>磁盘清理中心</div>
+    <span class="sub">扫描完成</span>
+    <span class="chip">2026-10-28 22:28</span>
+  </div>
+
+  <div class="guide glass rise" style="--i:1" id="guide">
+    <b>🖱️ 试试：</b> 顶部切换磁盘 · 色带标题整组点选/展开 · 单击色块勾选 · 双击详情 · 搜索即时高亮
+    <button class="no" onclick="this.parentElement.remove()">收起</button>
+  </div>
+
+  <div class="hero">
+    <div class="stat glass green rise" style="--i:2">
+      <div class="spark">✨</div>
+      <div class="kpi"><span id="kpi-total">0</span><small>GB</small></div>
+      <div class="cap"><span id="kpi-drive">C 盘</span>可释放</div>
+      <div class="footnote">勾选后点底部按钮开始，删错了也能恢复</div>
+    </div>
+    <div class="stat glass rise" style="--i:3">
+      <div class="spark">🧹</div>
+      <div class="kpi"><span id="kpi-count">0</span><small>项</small></div>
+      <div class="cap">本盘可清理项</div>
+      <div class="footnote" id="kpi-l5note">另有 1 项系统区域仅给建议</div>
+    </div>
+    <div class="drives glass rise" style="--i:4">
+      <h3>磁盘占用（点击切换）</h3>
+      <div id="drive-rows"></div>
+    </div>
+  </div>
+
+  <!-- 磁盘 Tab -->
+  <div class="tabrow rise" style="--i:5">
+    <div class="segtabs" id="segtabs"><div class="tab-pill" id="tab-pill"></div></div>
+    <span class="hint">只显示本次扫描的磁盘</span>
+  </div>
+
+  <!-- 地图即清单 -->
+  <div class="mapcard glass rise" style="--i:6">
+    <div class="toolbar">
+      <div class="search" id="search-box">
+        <span>🔎</span>
+        <input id="search" placeholder="搜索项目名，如「微信」「缓存」…">
+        <button class="clr" id="search-clr">✕</button>
+      </div>
+    </div>
+    <div class="bands" id="bands"></div>
+    <div class="l5strip" id="l5strip">
+      <div class="row">
+        <span>🔵</span><span id="l5-title"></span>
+        <button class="exp" id="l5-toggle">怎么处理？▾</button>
+      </div>
+      <div class="detail">
+        <p>这块是 Windows 的系统组件仓库，<b>不能直接删</b>。想瘦身可以用系统自带的整理命令（需要管理员权限的终端）：</p>
+        <p><code>DISM /Online /Cleanup-Image /StartComponentCleanup</code></p>
+        <p style="color:var(--ink-3)">一般能回收几个 GB，只清过期组件，安全。需要的话，让 Claude 手把手带你做。</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="note">
+    ⚠️ 设计原型 v4：C 盘数据来自今天的真实扫描，B 盘项目为演示数据 · 提交按钮只演示范式，不会真的删除。<br>
+    动画会在系统开启「减弱动态效果」时自动关闭 · 零依赖纯手写，本地直接打开即可
+  </footer>
+</div>
+
+<div class="actionbar glass rise" style="--i:7">
+  <div class="cnt"><b id="sel-n">0</b><span>项已选</span></div>
+  <div class="sep"></div>
+  <div class="cnt"><b id="sel-b">0 MB</b><span>预计释放</span></div>
+  <button class="cta" id="cta"><span class="ico">开始清理</span></button>
+</div>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal glass" id="modal" style="position:relative">
+    <button class="x" id="modal-x">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div class="toast glass" id="toast"><span>✅</span><span id="toast-msg"></span></div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* ============ 数据 ============ */
+var LEVELS = {
+  1: { lv:1, key:'l1', color:'#199e70', icon:'🟢', name:'放心清理', desc:'删了也会自动重建，不影响使用' },
+  2: { lv:2, key:'l2', color:'#c98500', icon:'🟡', name:'系统垃圾', desc:'临时文件、更新残留' },
+  3: { lv:3, key:'l3', color:'#a64b1c', icon:'🟠', name:'先存回收站', desc:'应用缓存，30 天可找回' },
+  4: { lv:4, key:'l4', color:'#e66767', icon:'🔴', name:'逐项确认', desc:'可疑大文件，你点头才动' },
+  5: { lv:5, key:'l5', color:'#3987e5', icon:'🔵', name:'仅给建议', desc:'系统区域，只教方法不代删' }
+};
+var DATA = {
+  C: {
+    label: 'C 盘',
+    findings: [
+      {id:'jy',   lv:3, name:'剪映缓存',       bytes:1353000000, desc:'剪映视频编辑器的素材与草稿缓存。清掉后工程草稿还在，但缓存素材需要重新加载。'},
+      {id:'wy',   lv:3, name:'网易云音乐缓存',  bytes:1161000000, desc:'听歌时缓存的音频文件，清理后下次播放会重新下载。'},
+      {id:'wx',   lv:3, name:'微信缓存',       bytes:773000000,  desc:'聊天图片、视频、文件的缓存。清理后聊天记录还在，图片点开时重新加载。'},
+      {id:'vs',   lv:2, name:'VS Code 扩展安装包', bytes:1506938297, desc:'VS Code 装扩展后留下的安装包，装完就没用了，放心删。'},
+      {id:'ut',   lv:2, name:'用户临时文件',    bytes:478981121, desc:'各种软件运行时产生的临时文件，通常关掉软件就没用了。'},
+      {id:'wu',   lv:2, name:'Windows 更新下载缓存', bytes:27534, desc:'系统更新装完后残留的下载包。', admin:true},
+      {id:'st',   lv:2, name:'系统临时文件',    bytes:0, desc:'系统层面的临时文件，需要管理员权限。', admin:true},
+      {id:'cd',   lv:2, name:'应用崩溃转储',    bytes:0, desc:'程序崩溃时生成的排查文件，不出问题就用不到。'},
+      {id:'wr',   lv:2, name:'错误报告',        bytes:0, desc:'发给微软的错误报告存档，已无用处。', admin:true},
+      {id:'nv',   lv:2, name:'NVIDIA 更新缓存', bytes:0, desc:'显卡驱动更新包缓存。'},
+      {id:'pw',   lv:1, name:'Playwright 浏览器', bytes:722467860, desc:'网页自动化测试用的浏览器，下次跑测试会自动重新下载。'},
+      {id:'pnpm', lv:1, name:'pnpm 缓存',       bytes:703588484, desc:'前端包管理器的下载缓存，删了下次装包重新下载。'},
+      {id:'pnpm2',lv:1, name:'pnpm 存储库',     bytes:569000000, desc:'前端包的本地仓库，删了项目依赖会重新链接。'},
+      {id:'gom',  lv:1, name:'Go 模块缓存',     bytes:418000000, desc:'Go 语言依赖包缓存，编译时自动重新下载。'},
+      {id:'gob',  lv:1, name:'Go 构建缓存',     bytes:385976510, desc:'Go 编译中间产物，重新编译时自动重建。'},
+      {id:'chr',  lv:1, name:'Chrome 浏览器缓存', bytes:236000000, desc:'网页缓存，清理后首次打开网站略慢。'},
+      {id:'chc',  lv:1, name:'Chrome 编译缓存', bytes:236000000, desc:'浏览器内部优化缓存，会自动重建。'},
+      {id:'edp',  lv:1, name:'Edge 来源数据缓存', bytes:176781704, desc:'Edge 浏览器的数据校验缓存，自动重建。'},
+      {id:'edc',  lv:1, name:'Edge 扩展缓存',   bytes:163651900, desc:'Edge 扩展的下载缓存，自动重建。'},
+      {id:'npm',  lv:1, name:'npm 缓存',        bytes:150000000, desc:'Node.js 包下载缓存，删了下次重新下载。'}
+    ],
+    l5: [{id:'wsx', name:'WinSxS 组件存储', bytes:20905000000, desc:'Windows 系统组件仓库，只能用系统命令整理，不能手动删。'}]
+  },
+  B: {
+    label: 'B 盘',
+    findings: [
+      {id:'b-pnpm', lv:1, name:'pnpm 存储库（B）', bytes:2254857824, desc:'放在 B 盘的前端包仓库，删了项目依赖会重新链接。'},
+      {id:'b-inst', lv:2, name:'旧安装包存档',     bytes:1288490188, desc:'Downloads 里攒下的 installer 安装包，装完就可以删。'},
+      {id:'b-mu',   lv:3, name:'模拟器缓存',       bytes:858993459,  desc:'安卓模拟器的镜像缓存，下次启动会重建。'},
+      {id:'b-dl',   lv:2, name:'浏览器下载残留',   bytes:314572800,  desc:'浏览器没清的下载临时文件。'}
+    ],
+    l5: []
+  }
+};
+var DRIVES = [
+  {letter:'C', pct:90, free:11.98, total:116.4, scanned:true},
+  {letter:'B', pct:82, free:52.3,  total:295.3, scanned:true},
+  {letter:'D', pct:54, free:29.6,  total:64.2,  scanned:false}
+];
+
+/* ============ 纯函数 ============ */
+function fmtBytes(n) {
+  if (!isFinite(n) || n <= 0) return '0 MB';
+  var u = ['B','KB','MB','GB','TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
+}
+function squarify(children, x, y, w, h) {
+  if (!children.length || w <= 0 || h <= 0) return [];
+  var total = children.reduce(function (s, c) { return s + c.area; }, 0);
+  if (total <= 0) return [];
+  var scale = (w * h) / total;
+  var items = children.map(function (c) { c._a = c.area * scale; return c; }).sort(function (a, b) { return b._a - a._a; });
+  function worst(row, len) {
+    var s = row.reduce(function (t, c) { return t + c._a; }, 0);
+    var mx = row[0]._a, mn = row[row.length - 1]._a;
+    return Math.max(len * len * mx / (s * s), (s * s) / (len * len * mn));
+  }
+  var rx = x, ry = y, rw = w, rh = h, i = 0;
+  while (i < items.length) {
+    var shorter = Math.min(rw, rh), row = [items[i]], j = i + 1;
+    while (j < items.length && worst(row.concat([items[j]]), shorter) <= worst(row, shorter)) { row.push(items[j++]); }
+    var s = row.reduce(function (t, c) { return t + c._a; }, 0);
+    if (rw >= rh) {
+      var stripW = s / rh, yy = ry;
+      row.forEach(function (c) { var ch = c._a / stripW; c.x = rx; c.y = yy; c.w = stripW; c.h = ch; yy += ch; });
+      rx += stripW; rw -= stripW;
+    } else {
+      var stripH = s / rw, xx = rx;
+      row.forEach(function (c) { var cw = c._a / stripH; c.x = xx; c.y = ry; c.w = cw; c.h = stripH; xx += cw; });
+      ry += stripH; rh -= stripH;
+    }
+    i = j;
+  }
+  return items;
+}
+var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function countUp(el, target, fmt, ms) {
+  if (reduced) { el.textContent = fmt(target); return; }
+  ms = ms || 800; var t0 = null;
+  function step(t) {
+    if (!t0) t0 = t;
+    var p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(target * e);
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ============ 状态 ============ */
+var active = 'C';
+var selected = {};   /* id -> true，跨盘合计 */
+var expanded = {};   /* 'lv' -> true 展开的色带 */
+var query = '';
+Object.keys(DATA).forEach(function (d) {
+  DATA[d].findings.forEach(function (f) { if (f.lv <= 2 && f.bytes > 100000) selected[f.id] = true; });
+});
+
+/* ============ 磁盘占用卡 ============ */
+(function () {
+  var html = '';
+  DRIVES.forEach(function (d) {
+    var c = d.pct > 90 ? 'var(--bad)' : d.pct > 75 ? 'var(--warn)' : 'var(--good)';
+    html += '<div class="drow' + (d.scanned ? '' : ' inactive') + '" data-drive="' + d.letter + '" title="' +
+      (d.scanned ? '点击切换到 ' + d.letter + ' 盘' : '本次未扫描') + '"><span class="letter">' + d.letter + '</span>' +
+      '<div class="track"><div class="fill" data-w="' + d.pct + '" style="background:' + c + '"></div></div>' +
+      '<span class="note">' + d.pct + '% 满 · 剩 ' + d.free + ' GB</span></div>';
+  });
+  document.getElementById('drive-rows').innerHTML = html;
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      document.querySelectorAll('.fill').forEach(function (f) { f.style.width = f.getAttribute('data-w') + '%'; });
+    });
+  });
+  document.querySelectorAll('.drow[data-drive]').forEach(function (r) {
+    r.onclick = function () {
+      var d = r.getAttribute('data-drive');
+      if (DATA[d]) switchDrive(d);
+    };
+  });
+})();
+
+/* ============ Tab ============ */
+function buildTabs() {
+  var host = document.getElementById('segtabs');
+  host.querySelectorAll('.segtab').forEach(function (t) { t.remove(); });
+  Object.keys(DATA).forEach(function (d) {
+    var b = document.createElement('button');
+    b.className = 'segtab' + (d === active ? ' on' : '');
+    b.setAttribute('data-drive', d);
+    b.innerHTML = DATA[d].label + '<span class="n">' + DATA[d].findings.length + ' 项</span>';
+    b.onclick = function () { switchDrive(d); };
+    host.appendChild(b);
+  });
+  movePill(false);
+}
+function movePill(anim) {
+  var pill = document.getElementById('tab-pill');
+  var on = document.querySelector('.segtab.on');
+  if (!on) return;
+  if (!anim) pill.style.transition = 'none';
+  pill.style.left = on.offsetLeft + 'px';
+  pill.style.width = on.offsetWidth + 'px';
+  if (!anim) { pill.offsetHeight; pill.style.transition = ''; }
+}
+function switchDrive(d) {
+  if (d === active) return;
+  active = d; query = '';
+  document.getElementById('search').value = '';
+  document.getElementById('search-box').classList.remove('has');
+  buildTabs();
+  renderAll(true);
+  var fs = DATA[d].findings, sum = fs.reduce(function (s, f) { return s + f.bytes; }, 0);
+  countUp(document.getElementById('kpi-total'), sum / 1073741824, function (v) { return v.toFixed(1); }, 500);
+  countUp(document.getElementById('kpi-count'), fs.length, function (v) { return Math.round(v); }, 500);
+  document.getElementById('kpi-drive').textContent = DATA[d].label;
+}
+
+/* ============ 地图（色带）============ */
+var SMALL = 100000;
+function renderBands() {
+  var host = document.getElementById('bands');
+  host.innerHTML = '';
+  var fs = DATA[active].findings;
+  var big = [3,2,1].map(function (lv) {
+    return { lv: lv, items: fs.filter(function (f) { return f.lv === lv && f.bytes > SMALL; }) };
+  }).filter(function (b) { return b.items.length; });
+  var grand = big.reduce(function (s, b) { return s + b.items.reduce(function (t, f) { return t + f.bytes; }, 0); }, 0) || 1;
+  var gi = 0;
+  big.forEach(function (b) {
+    var m = LEVELS[b.lv];
+    var sum = b.items.reduce(function (s, f) { return s + f.bytes; }, 0);
+    var band = document.createElement('div');
+    band.className = 'band';
+    band.setAttribute('data-lv', b.lv);
+    var H = expanded[b.lv] ? 380 : Math.max(66, Math.round(300 * sum / grand));
+    var tinies = fs.filter(function (f) { return f.lv === b.lv && f.bytes <= SMALL; });
+    band.innerHTML =
+      '<div class="band-head">' +
+        '<span class="chev">▼</span>' + m.icon +
+        '<span class="nm">' + m.name + '</span>' +
+        '<span class="bytes">' + fmtBytes(sum) + '</span>' +
+        '<span class="selstat" data-lv="' + b.lv + '"></span>' +
+        '<span class="desc">' + m.desc + '</span>' +
+        '<button class="grp-toggle" data-lv="' + b.lv + '">全选</button>' +
+      '</div>' +
+      '<div class="band-body tm" style="height:' + H + 'px"></div>';
+    host.appendChild(band);
+
+    var body = band.querySelector('.band-body');
+    layoutBand(band, b.items, m, gi, H);
+    gi += b.items.length;
+
+    /* 色带标题：点文字=展开/收起 */
+    band.querySelector('.band-head').onclick = function (e) {
+      if (e.target.closest('.grp-toggle')) return;
+      toggleExpand(band, b.lv, b.items, m);
+    };
+    /* 组级全选/取消 */
+    band.querySelector('.grp-toggle').onclick = function (e) {
+      e.stopPropagation();
+      var allOn = b.items.every(function (f) { return selected[f.id]; });
+      b.items.forEach(function (f) { if (allOn) delete selected[f.id]; else selected[f.id] = true; });
+      refresh();
+      wave(band);
+    };
+    /* 微小项入口 */
+    if (tinies.length) {
+      var t = document.createElement('button');
+      t.className = 'tinies';
+      t.innerHTML = '＋ ' + tinies.length + ' 个小项（共 ' + fmtBytes(tinies.reduce(function (s, f) { return s + f.bytes; }, 0)) + '）';
+      t.onclick = function () { openTinies(m, tinies); };
+      band.appendChild(t);
+    }
+  });
+  refresh();
+}
+function namePx(s) { var w = 0; for (var i = 0; i < s.length; i++) w += s.charCodeAt(i) > 255 ? 12.2 : 6.6; return w; }
+function layoutBand(band, items, m, gi, H) {
+  var body = band.querySelector('.band-body');
+  var W = Math.max(140, (body.clientWidth || 960) - 8);   /* 四周留 4px 内衬，圆角不再切到色块 */
+  var laid = squarify(items.map(function (f) { return { finding: f, area: Math.max(f.bytes, SMALL * 4) }; }), 4, 4, W, Math.max(60, H - 8));
+  body.innerHTML = laid.map(function (c, idx) {
+    var f = c.finding;
+    /* 标签分级：放得下完整名字就放名字（高度够再补大小），放不下只放大小，再放不下留白（悬停有提示） */
+    var nmOK = c.w >= namePx(f.name) + (f.admin ? 18 : 0) + 14 && c.h >= 30;
+    var label = nmOK
+      ? '<div class="nm">' + f.name + (f.admin ? ' 🔒' : '') + '</div>' + (c.h >= 50 ? '<div class="sz">' + fmtBytes(f.bytes) + '</div>' : '')
+      : (c.w >= 56 && c.h >= 22 ? '<div class="sz">' + fmtBytes(f.bytes) + '</div>' : '');
+    return '<div class="cell" data-id="' + f.id + '" style="--i:' + (gi + idx) +
+      ';left:' + (c.x + 2) + 'px;top:' + (c.y + 2) + 'px;width:' + (c.w - 4) + 'px;height:' + (c.h - 4) +
+      'px;background:' + m.color + '">' + label + '</div>';
+  }).join('');
+  body.querySelectorAll('.cell').forEach(function (node) {
+    var id = node.getAttribute('data-id');
+    node.onclick = function () { toggle(id); };
+    node.ondblclick = function (e) { e.preventDefault(); openModal(id); };
+    node.onmousemove = function (e) { showTip(e, id); };
+    node.onmouseleave = hideTip;
+  });
+}
+function toggleExpand(band, lv, items, m) {
+  var was = !!expanded[lv];
+  Object.keys(expanded).forEach(function (k) { delete expanded[k]; });
+  if (!was) expanded[lv] = true;
+  document.querySelectorAll('.band').forEach(function (bd) {
+    bd.classList.toggle('open', !!expanded[bd.getAttribute('data-lv')]);
+    bd.classList.toggle('hot', !!expanded[bd.getAttribute('data-lv')]);
+    var b2 = bd.querySelector('.band-body');
+    var l2 = +bd.getAttribute('data-lv');
+    var its = DATA[active].findings.filter(function (f) { return f.lv === l2 && f.bytes > SMALL; });
+    var s2 = its.reduce(function (s, f) { return s + f.bytes; }, 0);
+    var grand2 = DATA[active].findings.filter(function (f) { return f.bytes > SMALL; }).reduce(function (s, f) { return s + f.bytes; }, 0) || 1;
+    b2.style.height = (expanded[l2] ? 380 : Math.max(66, Math.round(300 * s2 / grand2))) + 'px';
+  });
+  setTimeout(function () {
+    var gi = 0;
+    [3,2,1].forEach(function (l) {
+      var bd = document.querySelector('.band[data-lv="' + l + '"]');
+      if (!bd) return;
+      var its = DATA[active].findings.filter(function (f) { return f.lv === l && f.bytes > SMALL; });
+      layoutBand(bd, its, LEVELS[l], gi, bd.querySelector('.band-body').clientHeight);
+      gi += its.length;
+    });
+    refresh();
+  }, reduced ? 0 : 470);
+}
+function wave(band) {
+  if (reduced) return;
+  band.querySelectorAll('.cell').forEach(function (c, i) {
+    setTimeout(function () {
+      c.classList.add('wave');
+      setTimeout(function () { c.classList.remove('wave'); }, 520);
+    }, i * 24);
+  });
+}
+
+/* ============ 悬浮提示 ============ */
+var tip = document.getElementById('tip');
+function findById(id) {
+  for (var d in DATA) {
+    var f = DATA[d].findings.filter(function (x) { return x.id === id; })[0];
+    if (f) return f;
+  }
+  return null;
+}
+function showTip(e, id) {
+  var f = findById(id); if (!f) return;
+  var m = LEVELS[f.lv];
+  tip.innerHTML = '<b>' + m.icon + ' ' + f.name + (f.admin ? ' 🔒需管理员' : '') + '</b><span>' + fmtBytes(f.bytes) + ' · ' + m.name +
+    (selected[f.id] ? ' · 已勾选' : '') + '</span><span style="display:block;margin-top:3px;color:var(--ink-3)">单击勾选 · 双击详情</span>';
+  /* 先量尺寸，再贴边翻转：右/下放不下就往左/上翻 */
+  var w = tip.offsetWidth, h = tip.offsetHeight, pad = 12;
+  var x = e.clientX + 16, y = e.clientY + 18;
+  if (x + w > innerWidth - pad) x = Math.max(pad, e.clientX - w - 16);
+  if (y + h > innerHeight - pad) y = Math.max(pad, e.clientY - h - 18);
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+  tip.classList.add('show');
+}
+function hideTip() { tip.classList.remove('show'); }
+
+/* ============ 模态框 ============ */
+var mbg = document.getElementById('modal-bg');
+var TXT = {
+  1: '勾选后直接删除，软件需要时会自动重建，不用操心。',
+  2: '勾选后直接删除，这些本来就是用完即弃的文件。',
+  3: '勾选后先搬进「可恢复区」暂存 30 天，期间随时可以找回，到期自动清除。',
+  4: '你确认之后才会处理。',
+  5: '系统区域不代删，按给出的命令自己操作，或者让 Claude 带你一步步来。'
+};
+function badgeColor(lv) { return ['#4ed8a6','#e8b64d','#e8926a','#f09a9a','#7db4f0'][lv-1]; }
+function openModal(id) {
+  var f = findById(id);
+  if (!f) { var l5 = DATA[active].l5.filter(function (x) { return x.id === id; })[0]; if (!l5) return; f = l5; f.lv = 5; }
+  var m = LEVELS[f.lv];
+  document.getElementById('modal-body').innerHTML =
+    '<h3>' + m.icon + ' ' + f.name + '<span class="badge" style="background:var(--' + m.key + '-soft);color:' + badgeColor(f.lv) + '">' +
+    m.name + ' · ' + fmtBytes(f.bytes) + '</span></h3>' +
+    '<p style="margin-top:10px">' + f.desc + '</p>' +
+    '<p><b style="color:var(--ink-1)">怎么处理：</b>' + TXT[f.lv] + '</p>';
+  mbg.classList.add('open');
+}
+function openTinies(m, tinies) {
+  var rows = tinies.map(function (f) {
+    return '<div class="mrow"><input type="checkbox" class="cbx" data-id="' + f.id + '"' + (selected[f.id] ? ' checked' : '') +
+      ' style="--gc:' + m.color + '"><span>' + f.name + (f.admin ? ' 🔒' : '') + '</span><span class="bytes">' + fmtBytes(f.bytes) + '</span></div>';
+  }).join('');
+  document.getElementById('modal-body').innerHTML =
+    '<h3>' + m.icon + ' ' + m.name + '<span class="badge" style="background:var(--' + m.key + '-soft);color:' + badgeColor(m.lv) + '">小项</span></h3>' +
+    '<p>这些项目太小，画不进地图，但同样可以勾选清理：</p>' + rows;
+  mbg.classList.add('open');
+  document.querySelectorAll('#modal-body .cbx').forEach(function (cb) {
+    cb.onchange = function () { toggle(cb.getAttribute('data-id')); };
+  });
+}
+function closeModal() { mbg.classList.remove('open'); }
+document.getElementById('modal-x').onclick = closeModal;
+mbg.onclick = function (e) { if (e.target === mbg) closeModal(); };
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { closeModal(); if (query) { query = ''; document.getElementById('search').value = ''; applySearch(); } }
+});
+
+/* ============ 勾选联动 ============ */
+function toggle(id) {
+  if (selected[id]) delete selected[id]; else selected[id] = true;
+  refresh();
+}
+function refresh() {
+  var allSel = [];
+  for (var d in DATA) DATA[d].findings.forEach(function (f) { if (selected[f.id]) allSel.push(f); });
+  countUpQuick(document.getElementById('sel-n'), allSel.length, function (v) { return Math.round(v); });
+  countUpQuick(document.getElementById('sel-b'), allSel.reduce(function (s, f) { return s + f.bytes; }, 0) / 1073741824, function (v) { return v.toFixed(1) + ' GB'; });
+  document.querySelectorAll('.cell').forEach(function (c) {
+    var on = !!selected[c.getAttribute('data-id')];
+    c.classList.toggle('off', !on); c.classList.toggle('on', on);
+  });
+  [1,2,3,4].forEach(function (lv) {
+    var el = document.querySelector('.selstat[data-lv="' + lv + '"]');
+    if (!el) return;
+    var fs = DATA[active].findings.filter(function (f) { return f.lv === lv; });
+    var n = fs.filter(function (f) { return selected[f.id]; }).length;
+    el.textContent = n ? '已选 ' + n + '/' + fs.length : '';
+    el.classList.toggle('some', n > 0);
+    var gt = document.querySelector('.grp-toggle[data-lv="' + lv + '"]');
+    if (gt) gt.textContent = (n === fs.length && n > 0) ? '取消' : '全选';
+  });
+  /* 搜索高亮 */
+  applySearch();
+}
+function countUpQuick(el, target, fmt) {
+  if (reduced) { el.textContent = fmt(target); return; }
+  var from = parseFloat(el.getAttribute('data-v') || 0), t0 = null, ms = 380;
+  function step(t) {
+    if (!t0) t0 = t;
+    var p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(from + (target - from) * e);
+    if (p < 1) requestAnimationFrame(step); else el.setAttribute('data-v', target);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ============ 搜索 ============ */
+function applySearch() {
+  document.querySelectorAll('.cell').forEach(function (c) {
+    var f = findById(c.getAttribute('data-id'));
+    var hit = !query || (f && f.name.toLowerCase().indexOf(query.toLowerCase()) >= 0);
+    c.classList.toggle('fade', !hit);
+  });
+}
+document.getElementById('search').addEventListener('input', function () {
+  query = this.value.trim();
+  document.getElementById('search-box').classList.toggle('has', !!query);
+  applySearch();
+});
+document.getElementById('search-clr').onclick = function () {
+  query = ''; document.getElementById('search').value = '';
+  document.getElementById('search-box').classList.remove('has');
+  applySearch();
+};
+
+/* ============ L5 / 全局按钮 / 提交 ============ */
+function renderL5() {
+  var l5 = DATA[active].l5, strip = document.getElementById('l5strip');
+  if (!l5.length) { strip.style.display = 'none'; document.getElementById('kpi-l5note').textContent = '全部项目都可以勾选处理'; return; }
+  strip.style.display = '';
+  document.getElementById('l5-title').innerHTML = '另有 <span class="big">' + fmtBytes(l5[0].bytes) + '</span> 在系统区域（' + l5[0].name + '）';
+  document.getElementById('kpi-l5note').textContent = '另有 ' + l5.length + ' 项系统区域仅给建议';
+}
+document.getElementById('l5-toggle').onclick = function () {
+  var s = document.getElementById('l5strip');
+  s.classList.toggle('open');
+  this.textContent = s.classList.contains('open') ? '收起 ▴' : '怎么处理？▾';
+};
+document.getElementById('cta').onclick = function () {
+  this.innerHTML = '<span class="ico">✅ 已提交，回到终端继续</span>';
+  this.classList.add('done');
+  toast('已把你的勾选交给 Claude，可以关掉这个页面啦', 3600);
+};
+function toast(msg, ms) {
+  var t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(function () { t.classList.remove('show'); }, ms || 2400);
+}
+
+/* ============ 启动 ============ */
+function renderAll(keepScroll) {
+  renderBands(); renderL5(); refresh();
+  if (!keepScroll) {
+    var fs = DATA[active].findings;
+    countUp(document.getElementById('kpi-total'), fs.reduce(function (s, f) { return s + f.bytes; }, 0) / 1073741824, function (v) { return v.toFixed(1); });
+    countUp(document.getElementById('kpi-count'), fs.length, function (v) { return Math.round(v); });
+  }
+}
+/* 截图自检钩子：#bottom 滚到底部，#tip 在屏幕右下角强制弹出提示（仅本地验证用） */
+if (location.hash === '#bottom') setTimeout(function () { window.scrollTo(0, 9e9); }, 650);
+if (location.hash === '#tip') setTimeout(function () {
+  window.scrollTo(0, 9e9);
+  var cells = document.querySelectorAll('#bands .band:last-child .cell');
+  var c = cells[cells.length - 1];
+  if (c) showTip({ clientX: innerWidth - 26, clientY: innerHeight - 26 }, c.getAttribute('data-id'));
+}, 750);
+
+buildTabs();
+renderAll();
+/* 几何自检钩子：#geom 把按钮变红并把边界矩形写进 document.title */
+if (location.hash === '#geom') {
+  var ctaEl = document.getElementById('cta');
+  ctaEl.style.background = 'crimson'; ctaEl.style.color = '#fff';
+  var rr = ctaEl.getBoundingClientRect(), bb = document.querySelector('.actionbar').getBoundingClientRect();
+  document.title = 'CTA ' + Math.round(rr.left) + ',' + Math.round(rr.top) + ' ' + Math.round(rr.width) + 'x' + Math.round(rr.height) +
+    ' | BAR ' + Math.round(bb.left) + ',' + Math.round(bb.top) + ' ' + Math.round(bb.width) + 'x' + Math.round(bb.height) +
+    ' | VW ' + innerWidth + 'x' + innerHeight;
+}
+/* 数字探针钩子：#probe 把关键元素边界写进左上角浮层（比视觉判断可靠） */
+if (location.hash === '#probe') {
+  var probe = function () {
+    window.scrollTo(0, 9e9);
+    var last = document.querySelectorAll('#bands .band:last-child .cell');
+    var lc = last[last.length - 1];
+    if (lc) showTip({ clientX: innerWidth - 26, clientY: innerHeight - 26 }, lc.getAttribute('data-id'));
+    var tipR = document.getElementById('tip').getBoundingClientRect();
+    var ctaR = document.getElementById('cta').getBoundingClientRect();
+    var barR = document.querySelector('.actionbar').getBoundingClientRect();
+    var ok = function (r) { return (r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight) ? 'Y' : 'N'; };
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;top:8px;left:8px;z-index:999;background:#000;color:#0f0;font:13px/1.8 Consolas,monospace;padding:8px 14px;border-radius:8px;border:1px solid #0f0';
+    d.textContent = 'VW ' + innerWidth + 'x' + innerHeight +
+      ' | BAR L' + Math.round(barR.left) + ' R' + Math.round(barR.right) + ' B' + Math.round(barR.bottom) + ' OK:' + ok(barR) +
+      ' | CTA L' + Math.round(ctaR.left) + ' R' + Math.round(ctaR.right) + ' B' + Math.round(ctaR.bottom) + ' OK:' + ok(ctaR) +
+      ' | TIP L' + Math.round(tipR.left) + ' R' + Math.round(tipR.right) + ' T' + Math.round(tipR.top) + ' B' + Math.round(tipR.bottom) + ' OK:' + ok(tipR);
+    document.body.appendChild(d);
+  };
+  setTimeout(probe, 800); setTimeout(probe, 1600);
+}
+var rz;
+window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(renderBands, 180); });
+window.addEventListener('load', function () { movePill(false); });
+</script>
+</body>
+</html>
