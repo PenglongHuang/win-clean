@@ -30,13 +30,17 @@ Get-PSDrive -PSProvider FileSystem | Select Name,Used,Free
 - ⚡快速档：只跑快扫（L1+L2 默认勾选即可执行）
 - 🎯标准档：快扫 + 已知残留核对（learned.json 全量）
 - 🔬深度档：快扫 + Agent 探索（见阶段②B）
+- 盘位选择：问用户要扫哪些盘，默认全部固定盘；把盘符列表传给 scan.ps1 的 -Drives 参数（如 `-Drives "C,D"`）
 
 ## 阶段② 扫描
 
 A. 快扫（所有档位必跑）：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$sk\logs\scan-result.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$sk\logs\scan-result.json" -Drives "<用户选择的盘符>" -ProgressFile "$sk\logs\scan-progress.json"
 ```
+（两个新参数默认可省略：不传 -Drives 扫全部固定盘，不传 -ProgressFile 不写进度文件。）
+
+后台运行扫描，期间每隔几秒读 progress 文件并向用户播报进度（"正在扫描 npm-cache (5/24)…"），完成后播报发现总量。
 
 B. Agent 探索（仅深度档）— 像专家一样狩猎，规则库外的目标：
 1. `du -sh <盘>/* | sort -rh | head -20` 找未知大户
@@ -83,6 +87,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" 
 
 ## 参数速查
 
-scan.ps1: -RulesDir -OutFile -OnlyIds ｜ serve.ps1: -ScanFile -SelectionsOut -HistoryIndex -Static -OutHtml
+scan.ps1: -RulesDir -OutFile -OnlyIds -Drives -ProgressFile ｜ serve.ps1: -ScanFile -SelectionsOut -HistoryIndex -Static -OutHtml
 execute.ps1: -ScanFile -SelectionsFile -HistoryDir -DryRun ｜ report-gen.ps1: -ScanFile -ExecSummaryFile -SessionDir -HistoryRoot
 learn-rule.ps1: -RulesDir -Id -Level -Name -Paths -Type -Desc -AutoSelect

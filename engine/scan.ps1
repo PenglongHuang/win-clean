@@ -3,7 +3,9 @@
 param(
     [string]$RulesDir = (Join-Path $PSScriptRoot '..\rules'),
     [string]$OutFile  = (Join-Path (Get-Location) 'scan-result.json'),
-    [string[]]$OnlyIds
+    [string[]]$OnlyIds,
+    [string]$Drives,
+    [string]$ProgressFile
 )
 $ErrorActionPreference = 'Stop'
 
@@ -11,6 +13,20 @@ $ErrorActionPreference = 'Stop'
 # string (no expression parsing). Normalize: split every element on ',' and trim.
 if ($OnlyIds) {
     $OnlyIds = @($OnlyIds | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+# -Drives: comma-separated letters (e.g. "C,D"). Normalize to an uppercase letter set.
+# Empty/absent, or no valid tokens at all -> no filter (scan every drive).
+$driveSet = $null
+if ($Drives) {
+    $letters = @($Drives -split ',' | ForEach-Object { $_.Trim().ToUpperInvariant() } |
+        Where-Object { $_ -match '^[A-Z]$' } | Select-Object -Unique)
+    if ($letters.Count -gt 0) {
+        $driveSet = @{}
+        foreach ($l in $letters) { $driveSet[$l] = $true }
+    } else {
+        Write-Output ("WARN: -Drives '{0}' has no valid drive letters, scanning all drives" -f $Drives)
+    }
 }
 
 function Test-IsAdmin {
@@ -57,6 +73,15 @@ $rules = @($byId.Values)
 if ($OnlyIds) { $rules = @($rules | Where-Object { $OnlyIds -contains $_.id }) }
 
 $isAdmin = Test-IsAdmin
+
+# -ProgressFile: one small JSON heartbeat per evaluated rule (last write wins).
+$ruleTotal = $rules.Count
+$doneCount = 0
+$bytesSoFar = [int64]0
+if ($ProgressFile) {
+    $pdir = Split-Path -Parent $ProgressFile
+    if ($pdir -and -not (Test-Path -LiteralPath $pdir)) { New-Item -ItemType Directory -Path $pdir -Force | Out-Null }
+}
 $findings = @()
 foreach ($r in $rules) {
     $needsAdmin = @($r.guard) -contains 'admin-required' -and -not $isAdmin
@@ -65,24 +90,45 @@ foreach ($r in $rules) {
     $anyExists = $false
     foreach ($p in @($r.paths)) {
         $expanded = Expand-RulePath $p
+        if ($driveSet) {
+            # Drive filter active: keep only drive-letter paths (X:\...) whose letter is selected.
+            if (-not $expanded -or $expanded -notmatch '^[A-Za-z]:') { continue }
+            if (-not $driveSet.ContainsKey($expanded.Substring(0,1).ToUpperInvariant())) { continue }
+        }
         if (-not $expanded) { $pathResults += @{ path = $p; expanded = $null; exists = $false; bytes = 0 }; continue }
         $bytes = Get-PathBytes $expanded
         $exists = ($bytes -ge 0)
         if ($exists) { $anyExists = $true; $total += $bytes }
         $pathResults += @{ path = $p; expanded = $expanded; exists = $exists; bytes = [int64][Math]::Max($bytes, 0) }
     }
-    if (-not $anyExists) { continue }   # rule not present on this machine
-    $findings += [pscustomobject]@{
-        id = $r.id; level = [int]$r.level; name = $r.name; type = $r.type
-        strategy = $r.strategy; desc = $r.desc; auto_select = [bool]$r.auto_select
-        source = $r.source; bytes = $total; needs_admin = $needsAdmin
-        paths = $pathResults
+    $doneCount++
+    if ($anyExists) {
+        $findings += [pscustomobject]@{
+            id = $r.id; level = [int]$r.level; name = $r.name; type = $r.type
+            strategy = $r.strategy; desc = $r.desc; auto_select = [bool]$r.auto_select
+            source = $r.source; bytes = $total; needs_admin = $needsAdmin
+            paths = $pathResults
+        }
+        $bytesSoFar += $total
+    }
+    if ($ProgressFile) {
+        [pscustomobject]@{ done = $doneCount; total = $ruleTotal; currentId = [string]$r.id; currentName = [string]$r.name; bytesSoFar = $bytesSoFar } |
+            ConvertTo-Json -Compress | Set-Content -LiteralPath $ProgressFile -Encoding UTF8
     }
 }
+if ($ProgressFile) {
+    [pscustomobject]@{ done = $doneCount; total = $ruleTotal; currentId = ''; currentName = ''; bytesSoFar = $bytesSoFar } |
+        ConvertTo-Json -Compress | Set-Content -LiteralPath $ProgressFile -Encoding UTF8
+}
 
-$drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
+# Named $driveList, NOT $drives: PS 5.1 keeps the [string] constraint of the $Drives
+# parameter on the same (case-insensitive) variable, which would coerce this array to a string.
+$driveList = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
     [pscustomobject]@{ letter = $_.DeviceID; total = [uint64]$_.Size; free = [uint64]$_.FreeSpace }
 })
+if ($driveSet) {
+    $driveList = @($driveList | Where-Object { $_.letter -match '^[A-Za-z]:' -and $driveSet.ContainsKey($_.letter.Substring(0,1).ToUpperInvariant()) })
+}
 
 # Stable schema: totalBytes must always be a number, never null/absent.
 $totalBytes = ($findings | Measure-Object -Property bytes -Sum).Sum
@@ -91,7 +137,7 @@ if (-not $totalBytes) { $totalBytes = [int64]0 }
 $result = [pscustomobject]@{
     timestamp = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
     host      = $env:COMPUTERNAME
-    drives    = $drives
+    drives    = $driveList
     findings  = $findings
     totalBytes = $totalBytes
     isAdmin   = $isAdmin
