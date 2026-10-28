@@ -111,6 +111,23 @@ function initPage() {
     });
   }
 
+  function setLevel(lv, on) {
+    data.findings.forEach(function (f) {
+      if (f.level === lv && f.strategy !== 'report-only') {
+        if (on) selected[f.id] = true; else delete selected[f.id];
+      }
+    });
+    refreshBar(); renderTreemap(); renderList();
+  }
+  function setAll(on) {
+    data.findings.forEach(function (f) {
+      if (f.strategy !== 'report-only') {
+        if (on) selected[f.id] = true; else delete selected[f.id];
+      }
+    });
+    refreshBar(); renderTreemap(); renderList();
+  }
+
   function renderList() {
     var html = '';
     [1, 2, 3, 4, 5].forEach(function (lv) {
@@ -119,7 +136,9 @@ function initPage() {
       var m = LEVELS[lv];
       html += '<div class="lv-group" style="border-left:3px solid ' + m.color + '">' +
         '<div class="lv-head">' + m.icon + ' L' + lv + ' ' + m.name +
-        '<span class="lv-policy">' + m.policy + '</span></div>';
+        '<span class="lv-policy">' + m.policy + '</span>' +
+        (lv <= 4 ? '<span class="lv-ops"><a data-op="all" data-lv="' + lv + '">全选</a><a data-op="none" data-lv="' + lv + '">清空</a></span>' : '') +
+        '</div>';
       fs.forEach(function (f) {
         html += '<label class="lv-item"><input type="checkbox" data-cb-id="' + f.id + '"' +
           (selected[f.id] ? ' checked' : '') + (f.strategy === 'report-only' ? ' disabled' : '') + '>' +
@@ -136,17 +155,25 @@ function initPage() {
     Array.prototype.forEach.call(el('level-list').querySelectorAll('[data-detail]'), function (a) {
       a.onclick = function (e) { e.preventDefault(); showDetail(a.getAttribute('data-detail')); };
     });
+    Array.prototype.forEach.call(el('level-list').querySelectorAll('[data-op]'), function (a) {
+      a.onclick = function (e) {
+        e.preventDefault();
+        setLevel(parseInt(a.getAttribute('data-lv'), 10), a.getAttribute('data-op') === 'all');
+      };
+    });
   }
 
+  function closeDetail() { el('detail').classList.remove('open'); }
   function showDetail(id) {
     var f = data.findings.filter(function (x) { return x.id === id; })[0];
     if (!f) return;
     var m = LEVELS[f.level];
-    el('detail').innerHTML = '<h3>' + m.icon + ' ' + f.name + '</h3>' +
+    el('detail-card').innerHTML = '<span class="close-x" id="detail-x" title="关闭">✕</span><h3>' + m.icon + ' ' + f.name + '</h3>' +
       '<p>' + f.desc + '</p><p>等级 L' + f.level + ' · ' + m.policy + ' · 来源 ' + f.source + ' · ' + fmtBytes(f.bytes) + '</p>' +
       '<pre>' + f.paths.map(function (p) { return p.expanded || p.path + ' (未展开)'; }).join('\n') + '</pre>' +
       (f.strategy === 'report-only' ? '<p class="warn">此项仅报告，需按报告内命令手动处理</p>' : '');
-    el('detail').style.display = 'block';
+    el('detail').classList.add('open');
+    el('detail-x').onclick = closeDetail;
   }
 
   function submitSelection() {
@@ -171,6 +198,10 @@ function initPage() {
   renderDashboard(); renderTreemap(); renderList(); refreshBar();
   window.addEventListener('resize', renderTreemap);
   el('submit-btn').onclick = submitSelection;
+  el('sel-all').onclick = function (e) { e.preventDefault(); setAll(true); };
+  el('sel-none').onclick = function (e) { e.preventDefault(); setAll(false); };
+  el('detail').onclick = function (e) { if (e.target === el('detail')) closeDetail(); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDetail(); });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
