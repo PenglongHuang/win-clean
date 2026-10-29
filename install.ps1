@@ -1,15 +1,24 @@
-# Deploys the skill to %USERPROFILE%\.claude\skills\win-clean (dev artifacts excluded).
+﻿#Requires -Version 5.1
+# Install or update runtime files without removing local history or learned rules.
 $ErrorActionPreference = 'Stop'
 $src = $PSScriptRoot
-if (-not (Test-Path (Join-Path $src 'SKILL.md'))) {
-    Write-Output 'ERROR: run this from the win-clean repo root (SKILL.md not found)'
-    exit 1
-}
 $dst = Join-Path $env:USERPROFILE '.claude\skills\win-clean'
-if (Test-Path $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
+if (-not (Test-Path -LiteralPath (Join-Path $src 'SKILL.md'))) { throw 'SKILL.md not found' }
 New-Item -ItemType Directory -Path $dst -Force | Out-Null
-$keep = @('SKILL.md','README.md','engine','tools','rules','report')
-foreach ($k in $keep) {
-    Copy-Item -LiteralPath (Join-Path $src $k) -Destination $dst -Recurse -Force
+foreach ($name in @('SKILL.md', 'README.md')) {
+    Copy-Item -LiteralPath (Join-Path $src $name) -Destination (Join-Path $dst $name) -Force
 }
-Write-Output "INSTALLED: $dst (excluded: tests/, docs/, logs/, .git/)"
+foreach ($name in @('engine', 'tools', 'report', 'rules')) {
+    $sourceDir = Join-Path $src $name
+    $targetDir = Join-Path $dst $name
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    Get-ChildItem -LiteralPath $sourceDir -File -Recurse | ForEach-Object {
+        $relative = $_.FullName.Substring($sourceDir.Length).TrimStart('\')
+        $target = Join-Path $targetDir $relative
+        if ($name -eq 'rules' -and $relative -eq 'learned.json' -and (Test-Path -LiteralPath $target)) { return }
+        $parent = Split-Path -Parent $target
+        if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+    }
+}
+Write-Output "INSTALLED: $dst (local logs and learned rules preserved)"

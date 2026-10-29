@@ -8,7 +8,7 @@
 /* ============ 设计变量 ============ */
 :root {
   --bg: #0b0d13;
-  --ink-1: #eef1f6; --ink-2: #a6adbb; --ink-3: #7c8494;
+  --ink-1: #eef1f6; --ink-2: #c0c7d2; --ink-3: #a5adbb;
   --glass: rgba(255,255,255,.055); --glass-strong: rgba(255,255,255,.09);
   --line: rgba(255,255,255,.09);
   --radius: 16px;
@@ -25,7 +25,7 @@
 body {
   margin: 0; color: var(--ink-1);
   font-family: "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
-  background: var(--bg); min-height: 100vh; overflow-x: hidden; padding-bottom: 110px;
+  background: var(--bg); min-height: 100vh; overflow-x: hidden; padding-bottom: 190px;
 }
 .aurora { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 .aurora::before, .aurora::after { content: ""; position: absolute; border-radius: 50%; filter: blur(90px); }
@@ -245,6 +245,34 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
   /* 操作栏的居中靠 translateX(-50%)，不能被上面的 transform:none 冲掉 */
   .actionbar.rise { transform: translateX(-50%) !important; }
 }
+
+/* 清晰的选择状态与克制的视觉反馈 */
+.aurora::before, .aurora::after, .aurora .b3 { animation: none; }
+.cell { animation: none; opacity: 1; padding-top: 24px; }
+.cell.off { opacity: 1; filter: none; }
+.cell.on { box-shadow: inset 0 0 0 2px #fff; }
+.cell .nm { font-size: 13px; }
+.cell .sz { font-size: 12px; color: #fff; }
+.selection-mark { position:absolute; top:6px; right:7px; width:16px; height:16px; border:1.5px solid white; border-radius:4px; background:rgba(0,0,0,.35); }
+.cell.on .selection-mark { background:#fff; }
+.cell.on .selection-mark::after { content:'✓'; position:absolute; inset:-2px 0 0; text-align:center; color:#12372b; font-weight:800; font-size:13px; }
+.cell-detail { align-self:flex-start; margin-top:4px; color:#fff; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.55); border-radius:5px; cursor:pointer; font:inherit; font-size:11px; padding:2px 6px; }
+.cell:focus-visible, .cell-detail:focus-visible, button:focus-visible { outline:3px solid #fff; outline-offset:2px; z-index:5; }
+.cell.fade { opacity:.3 !important; }
+.actionbar { max-width:calc(100% - 32px); }
+
+
+[hidden] { display:none !important; }
+.view-controls { display:flex; align-items:center; gap:8px; margin:14px 0; flex-wrap:wrap; }
+.view-controls button, .list-row button, .review-confirm { color:#eef1f6; background:#29343d; border:1px solid #64707c; border-radius:8px; padding:7px 12px; cursor:pointer; }
+.view-controls button[aria-pressed="true"] { background:#1a745b; border-color:#6de4bd; }
+#result-count { color:var(--ink-2); font-size:13px; margin-left:auto; }
+.list-row { display:flex; align-items:center; gap:14px; border-top:1px solid var(--line); padding:12px 4px; }
+.list-row label { display:flex; align-items:center; gap:10px; flex:1; min-width:0; cursor:pointer; }
+.list-row input { width:18px; height:18px; accent-color:#28ba8e; }
+.list-row small { display:block; color:var(--ink-2); margin-top:3px; }
+.review-list { max-height:35vh; overflow:auto; line-height:1.9; }
+
 </style>
 </head>
 <body>
@@ -258,7 +286,7 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
   </div>
 
   <div class="guide glass rise" style="--i:1" id="guide">
-    <b>🖱️ 试试：</b> 顶部切换磁盘 · 色带标题整组点选/展开 · 单击色块勾选 · 双击详情 · 搜索即时高亮
+    <b>🖱️ 试试：</b> 切换磁盘，点击项目选择，点击「详情」查看处理方式
     <button class="no" onclick="this.parentElement.remove()">收起</button>
   </div>
 
@@ -267,7 +295,7 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
       <div class="spark">✨</div>
       <div class="kpi"><span id="kpi-total">0</span><small>GB</small></div>
       <div class="cap"><span id="kpi-drive">C 盘</span>可释放</div>
-      <div class="footnote">勾选后点底部按钮开始，删错了也能恢复</div>
+      <div class="footnote">预选项目可随时调整，请查看各项处理方式</div>
     </div>
     <div class="stat glass rise" style="--i:3">
       <div class="spark">🧹</div>
@@ -296,7 +324,7 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
         <button class="clr" id="search-clr">✕</button>
       </div>
     </div>
-    <div class="bands" id="bands"></div>
+    <div class="view-controls"><button type="button" id="map-view" aria-pressed="true">地图</button><button type="button" id="list-view" aria-pressed="false">列表与详情</button><span id="result-count" aria-live="polite"></span></div><div class="bands" id="bands"></div><div id="item-list" hidden></div>
     <div class="l5strip" id="l5strip">
       <div class="row">
         <span>🔵</span><span id="l5-title"></span>
@@ -305,7 +333,7 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
       <div class="detail">
         <p>这块是 Windows 的系统组件仓库，<b>不能直接删</b>。想瘦身可以用系统自带的整理命令（需要管理员权限的终端）：</p>
         <p><code>DISM /Online /Cleanup-Image /StartComponentCleanup</code></p>
-        <p style="color:var(--ink-3)">一般能回收几个 GB，只清过期组件，安全。需要的话，让 Claude 手把手带你做。</p>
+        <p style="color:var(--ink-3)">实际释放空间取决于系统状态。需要的话，让 Claude 带你了解后再操作。</p>
       </div>
     </div>
   </div>
@@ -324,8 +352,8 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
 </div>
 
 <div class="modal-bg" id="modal-bg">
-  <div class="modal glass" id="modal" style="position:relative">
-    <button class="x" id="modal-x">✕</button>
+  <div class="modal glass" id="modal" role="dialog" aria-modal="true" aria-label="项目详情" style="position:relative">
+    <button class="x" id="modal-x" aria-label="关闭">✕</button>
     <div id="modal-body"></div>
   </div>
 </div>
@@ -337,7 +365,7 @@ footer.note { text-align: center; color: var(--ink-3); font-size: 11.5px; margin
 var LEVELS = {
   1: { lv:1, key:'l1', color:'#199e70', icon:'🟢', name:'放心清理', desc:'删了也会自动重建，不影响使用' },
   2: { lv:2, key:'l2', color:'#c98500', icon:'🟡', name:'系统垃圾', desc:'临时文件、更新残留' },
-  3: { lv:3, key:'l3', color:'#a64b1c', icon:'🟠', name:'先存回收站', desc:'应用缓存，30 天可找回' },
+  3: { lv:3, key:'l3', color:'#a64b1c', icon:'🟠', name:'先存可恢复区', desc:'应用缓存，按规则保留' },
   4: { lv:4, key:'l4', color:'#e66767', icon:'🔴', name:'逐项确认', desc:'可疑大文件，你点头才动' },
   5: { lv:5, key:'l5', color:'#3987e5', icon:'🔵', name:'仅给建议', desc:'系统区域，只教方法不代删' }
 };
@@ -509,7 +537,7 @@ function renderBands() {
   var host = document.getElementById('bands');
   host.innerHTML = '';
   var fs = DATA[active].findings;
-  var big = [3,2,1].map(function (lv) {
+  var big = [4,3,2,1].map(function (lv) {
     return { lv: lv, items: fs.filter(function (f) { return f.lv === lv && f.bytes > SMALL; }) };
   }).filter(function (b) { return b.items.length; });
   var grand = big.reduce(function (s, b) { return s + b.items.reduce(function (t, f) { return t + f.bytes; }, 0); }, 0) || 1;
@@ -529,7 +557,7 @@ function renderBands() {
         '<span class="bytes">' + fmtBytes(sum) + '</span>' +
         '<span class="selstat" data-lv="' + b.lv + '"></span>' +
         '<span class="desc">' + m.desc + '</span>' +
-        '<button class="grp-toggle" data-lv="' + b.lv + '">全选</button>' +
+        (b.lv === 4 ? '' : '<button class="grp-toggle" data-lv="' + b.lv + '">全选</button>') +
       '</div>' +
       '<div class="band-body tm" style="height:' + H + 'px"></div>';
     host.appendChild(band);
@@ -544,7 +572,7 @@ function renderBands() {
       toggleExpand(band, b.lv, b.items, m);
     };
     /* 组级全选/取消 */
-    band.querySelector('.grp-toggle').onclick = function (e) {
+    if (band.querySelector('.grp-toggle')) band.querySelector('.grp-toggle').onclick = function (e) {
       e.stopPropagation();
       var allOn = b.items.every(function (f) { return selected[f.id]; });
       b.items.forEach(function (f) { if (allOn) delete selected[f.id]; else selected[f.id] = true; });
@@ -574,14 +602,16 @@ function layoutBand(band, items, m, gi, H) {
     var label = nmOK
       ? '<div class="nm">' + f.name + (f.admin ? ' 🔒' : '') + '</div>' + (c.h >= 50 ? '<div class="sz">' + fmtBytes(f.bytes) + '</div>' : '')
       : (c.w >= 56 && c.h >= 22 ? '<div class="sz">' + fmtBytes(f.bytes) + '</div>' : '');
-    return '<div class="cell" data-id="' + f.id + '" style="--i:' + (gi + idx) +
+    return '<div class="cell" role="checkbox" tabindex="0" aria-label="' + f.name + '" data-id="' + f.id + '" style="--i:' + (gi + idx) +
       ';left:' + (c.x + 2) + 'px;top:' + (c.y + 2) + 'px;width:' + (c.w - 4) + 'px;height:' + (c.h - 4) +
-      'px;background:' + m.color + '">' + label + '</div>';
+      'px;background:' + m.color + '"><span class="selection-mark" aria-hidden="true"></span>' + label + (c.w >= 100 && c.h >= 60 ? '<button class="cell-detail" type="button">详情</button>' : '') + '</div>';
   }).join('');
   body.querySelectorAll('.cell').forEach(function (node) {
     var id = node.getAttribute('data-id');
     node.onclick = function () { toggle(id); };
-    node.ondblclick = function (e) { e.preventDefault(); openModal(id); };
+    node.onkeydown = function (e) { if (e.target !== node) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(id); } };
+    var detail = node.querySelector('.cell-detail');
+    if (detail) detail.onclick = function (e) { e.stopPropagation(); hideTip(); openModal(id); };
     node.onmousemove = function (e) { showTip(e, id); };
     node.onmouseleave = hideTip;
   });
@@ -635,7 +665,7 @@ function showTip(e, id) {
   var f = findById(id); if (!f) return;
   var m = LEVELS[f.lv];
   tip.innerHTML = '<b>' + m.icon + ' ' + f.name + (f.admin ? ' 🔒需管理员' : '') + '</b><span>' + fmtBytes(f.bytes) + ' · ' + m.name +
-    (selected[f.id] ? ' · 已勾选' : '') + '</span><span style="display:block;margin-top:3px;color:var(--ink-3)">单击勾选 · 双击详情</span>';
+    (selected[f.id] ? ' · 已勾选' : '') + '</span><span style="display:block;margin-top:3px;color:var(--ink-3)">点击选择 · 查看详情</span>';
   /* 先量尺寸，再贴边翻转：右/下放不下就往左/上翻 */
   var w = tip.offsetWidth, h = tip.offsetHeight, pad = 12;
   var x = e.clientX + 16, y = e.clientY + 18;
@@ -649,6 +679,8 @@ function hideTip() { tip.classList.remove('show'); }
 
 /* ============ 模态框 ============ */
 var mbg = document.getElementById('modal-bg');
+var modalOrigin = null;
+function showDialog() { modalOrigin = document.activeElement; mbg.classList.add('open'); document.getElementById('modal-x').focus(); }
 var TXT = {
   1: '勾选后直接删除，软件需要时会自动重建，不用操心。',
   2: '勾选后直接删除，这些本来就是用完即弃的文件。',
@@ -666,7 +698,7 @@ function openModal(id) {
     m.name + ' · ' + fmtBytes(f.bytes) + '</span></h3>' +
     '<p style="margin-top:10px">' + f.desc + '</p>' +
     '<p><b style="color:var(--ink-1)">怎么处理：</b>' + TXT[f.lv] + '</p>';
-  mbg.classList.add('open');
+  showDialog();
 }
 function openTinies(m, tinies) {
   var rows = tinies.map(function (f) {
@@ -676,12 +708,12 @@ function openTinies(m, tinies) {
   document.getElementById('modal-body').innerHTML =
     '<h3>' + m.icon + ' ' + m.name + '<span class="badge" style="background:var(--' + m.key + '-soft);color:' + badgeColor(m.lv) + '">小项</span></h3>' +
     '<p>这些项目太小，画不进地图，但同样可以勾选清理：</p>' + rows;
-  mbg.classList.add('open');
+  showDialog();
   document.querySelectorAll('#modal-body .cbx').forEach(function (cb) {
     cb.onchange = function () { toggle(cb.getAttribute('data-id')); };
   });
 }
-function closeModal() { mbg.classList.remove('open'); }
+function closeModal() { mbg.classList.remove('open'); if (modalOrigin && modalOrigin.isConnected) modalOrigin.focus(); }
 document.getElementById('modal-x').onclick = closeModal;
 mbg.onclick = function (e) { if (e.target === mbg) closeModal(); };
 document.addEventListener('keydown', function (e) {
@@ -700,7 +732,7 @@ function refresh() {
   countUpQuick(document.getElementById('sel-b'), allSel.reduce(function (s, f) { return s + f.bytes; }, 0) / 1073741824, function (v) { return v.toFixed(1) + ' GB'; });
   document.querySelectorAll('.cell').forEach(function (c) {
     var on = !!selected[c.getAttribute('data-id')];
-    c.classList.toggle('off', !on); c.classList.toggle('on', on);
+    c.classList.toggle('off', !on); c.classList.toggle('on', on); c.setAttribute('aria-checked', String(on));
   });
   [1,2,3,4].forEach(function (lv) {
     var el = document.querySelector('.selstat[data-lv="' + lv + '"]');
@@ -714,6 +746,7 @@ function refresh() {
   });
   /* 搜索高亮 */
   applySearch();
+  renderList();
 }
 function countUpQuick(el, target, fmt) {
   if (reduced) { el.textContent = fmt(target); return; }
@@ -734,6 +767,7 @@ function applySearch() {
     var hit = !query || (f && f.name.toLowerCase().indexOf(query.toLowerCase()) >= 0);
     c.classList.toggle('fade', !hit);
   });
+  renderList();
 }
 document.getElementById('search').addEventListener('input', function () {
   query = this.value.trim();
@@ -760,9 +794,12 @@ document.getElementById('l5-toggle').onclick = function () {
   this.textContent = s.classList.contains('open') ? '收起 ▴' : '怎么处理？▾';
 };
 document.getElementById('cta').onclick = function () {
-  this.innerHTML = '<span class="ico">✅ 已提交，回到终端继续</span>';
-  this.classList.add('done');
-  toast('已把你的勾选交给 Claude，可以关掉这个页面啦', 3600);
+  var chosen = [];
+  Object.keys(DATA).forEach(function (d) { DATA[d].findings.forEach(function (f) { if (selected[f.id]) chosen.push({drive:d, item:f}); }); });
+  document.getElementById('modal-body').innerHTML = '<h3>确认已选项目</h3>' + (chosen.length ? '<p>共 ' + chosen.length + ' 项，预计 ' + fmtBytes(chosen.reduce(function (n,x) { return n+x.item.bytes; },0)) + '。请检查处理方式；需管理员的项目需要单独处理。</p><div class="review-list">' + chosen.map(function (x) { return '<div>' + x.drive + ' 盘 · ' + x.item.name + ' · ' + fmtBytes(x.item.bytes) + ' · ' + LEVELS[x.item.lv].name + (x.item.admin ? ' · 需管理员' : '') + '</div>'; }).join('') + '</div><p>这是演示原型，不会提交或删除文件。</p><button class="review-confirm" type="button">确认（演示）</button>' : '<p>尚未选择任何项目。请先选择需要处理的项目。</p>');
+  showDialog();
+  var confirm = document.querySelector('.review-confirm');
+  if (confirm) confirm.onclick = function () { closeModal(); toast('演示完成：没有提交或删除文件', 3600); };
 };
 function toast(msg, ms) {
   var t = document.getElementById('toast');
@@ -789,6 +826,24 @@ if (location.hash === '#tip') setTimeout(function () {
   var c = cells[cells.length - 1];
   if (c) showTip({ clientX: innerWidth - 26, clientY: innerHeight - 26 }, c.getAttribute('data-id'));
 }, 750);
+
+
+var currentView = 'map';
+function renderList() {
+  var host = document.getElementById('item-list');
+  if (!host) return;
+  var items = DATA[active].findings.filter(function(f) { return !query || f.name.toLowerCase().indexOf(query.toLowerCase()) >= 0; });
+  document.getElementById('result-count').textContent = query ? '找到 ' + items.length + ' 项' : '当前磁盘共 ' + items.length + ' 项';
+  host.innerHTML = items.length ? items.map(function(f) { return '<div class="list-row"><label><input type="checkbox" data-item="' + f.id + '" ' + (selected[f.id] ? 'checked' : '') + '> <span><strong>' + f.name + '</strong><small>' + LEVELS[f.lv].icon + ' ' + LEVELS[f.lv].name + (f.admin ? ' · 需管理员' : '') + '</small></span></label><span>' + fmtBytes(f.bytes) + '</span><button type="button" data-detail="' + f.id + '">详情</button></div>'; }).join('') : '<p>没有找到匹配的项目，请换个关键词。</p>';
+  host.querySelectorAll('[data-item]').forEach(function(el) { el.onchange = function() { toggle(el.dataset.item); }; });
+  host.querySelectorAll('[data-detail]').forEach(function(el) { el.onclick = function() { openModal(el.dataset.detail); }; });
+}
+function setView(view) {
+ currentView = view; document.getElementById('bands').hidden = view !== 'map'; document.getElementById('item-list').hidden = view !== 'list';
+ document.getElementById('map-view').setAttribute('aria-pressed', String(view === 'map')); document.getElementById('list-view').setAttribute('aria-pressed', String(view === 'list')); renderList();
+}
+document.getElementById('map-view').onclick = function() { setView('map'); };
+document.getElementById('list-view').onclick = function() { setView('list'); };
 
 buildTabs();
 renderAll();
@@ -823,7 +878,7 @@ if (location.hash === '#probe') {
   setTimeout(probe, 800); setTimeout(probe, 1600);
 }
 var rz;
-window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(renderBands, 180); });
+window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(function () { renderBands(); refresh(); }, 180); });
 window.addEventListener('load', function () { movePill(false); });
 </script>
 </body>

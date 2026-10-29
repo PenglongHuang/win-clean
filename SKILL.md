@@ -14,12 +14,20 @@ description: Windows 深度磁盘清理与空间分析。Use when user says C盘
 3. execute.ps1 拒绝的路径（保护清单命中）不得用其他方式绕过删除。
 4. 探索发现的沉淀规则，必须先征得用户同意再调用 learn-rule。
 
+## 对用户怎么说
+
+使用简短、具体的中文，数字带单位。扫描时说明正在检查的位置和进度；展示结果时区分发现容量与已选项目的预计释放量。提交前提醒用户检查项目的路径、处理方式和需管理员项。演练时明确说明没有实际删除；实际完成后根据执行报告说明处理、跳过和恢复方式。
+
+面向用户可用「放心清理」「系统垃圾」「可恢复区」「逐项确认」「仅供参考」解释五个等级，同时保留等级标识以对应报告。不要保证每一项都能恢复，也不要把预计释放量说成已释放量。跨盘项目的选择会包含该项目全部路径，须在确认前说明。
+
 ## 路径约定
 
 本文档中所有相对路径（engine/、tools/、rules/、logs/）均以本技能根目录
 （SKILL.md 所在目录）为基准。执行命令前先解析为绝对路径，例如：
 `$sk = "<本技能根目录的绝对路径>"`，然后所有命令写为 `powershell ... -File "$sk\engine\scan.ps1"`。
-logs/ 目录若不存在先创建：`New-Item -ItemType Directory -Path "$sk\logs" -Force`。
+每次运行都创建独立会话目录，避免读取上次的选择或覆盖历史：
+`$run = Join-Path "$sk\logs\runs" ([guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $run -Force | Out-Null`。
+`$run` 保持在同一会话中，并用于本次扫描、选择和执行。
 
 ## 阶段① 开始：概况与档位
 
@@ -36,7 +44,7 @@ Get-PSDrive -PSProvider FileSystem | Select Name,Used,Free
 
 A. 快扫（所有档位必跑）：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$sk\logs\scan-result.json" -Drives "<用户选择的盘符>" -ProgressFile "$sk\logs\scan-progress.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$run\scan-result.json" -Drives "<用户选择的盘符>" -ProgressFile "$run\scan-progress.json"
 ```
 （两个新参数默认可省略：不传 -Drives 扫全部固定盘，不传 -ProgressFile 不写进度文件。）
 
@@ -58,32 +66,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -
 ## 阶段③ 报告与勾选
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$sk\logs\scan-result.json" -SelectionsOut "$sk\logs\selections.json" -HistoryIndex "$sk\logs\history\index.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$run\scan-result.json" -SelectionsOut "$run\selections.json" -HistoryIndex "$sk\logs\history\index.json"
 ```
-用后台方式启动（如 Bash run_in_background），等待 `"$sk\logs\serve-info.json"` 出现后读取 URL，
-让用户在浏览器打开并勾选。轮询 `"$sk\logs\selections.json"` 出现（最多 15 分钟）。
+用后台方式启动（如 Bash run_in_background），等待 `"$run\serve-info.json"` 出现后读取 URL，
+让用户在浏览器打开并勾选。轮询 `"$run\selections.json"` 出现（最多 15 分钟）。
 超时未提交 → 读取 serve-info.json 的 pid 并 `Stop-Process -Id <pid>`，询问用户取消还是降级静态模式。
 
-降级：服务起不来 → `-Static -OutHtml "$sk\logs\report.html"`，用户在页面"提交清理"处
+降级：服务起不来 → `-Static -OutHtml "$run\report.html"`，用户在页面"提交清理"处
 复制命令回终端执行。用户执行复制命令后，把 `$env:TEMP\win-clean-selection.json`
-复制为 `"$sk\logs\selections.json"` 再进入阶段④。
+复制为 `"$run\selections.json"` 再进入阶段④。
 
 ## 阶段④ 执行
 
 ```
-$d = Join-Path "$sk\logs" ("history/" + (Get-Date -Format 'yyyy-MM-dd_HHmm'))
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\execute.ps1" -ScanFile "$sk\logs\scan-result.json" -SelectionsFile "$sk\logs\selections.json" -HistoryDir $d
+$d = Join-Path $run "execution"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\execute.ps1" -ScanFile "$run\scan-result.json" -SelectionsFile "$run\selections.json" -HistoryDir $d
 ```
-先给用户看 freedBytes 预估（可用 -DryRun 演练）。需要管理员的项在报告里给命令。
+执行前应先用 `-DryRun` 演练并给用户看结果；需要管理员的项会被跳过，不要声称页面已生成管理员命令。隔离到同一磁盘通常不会立即释放磁盘空间。
 
 ## 阶段⑤ 最终报告
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" -ScanFile "$sk\logs\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') -SessionDir $d -HistoryRoot "$sk\logs\history"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" -ScanFile "$run\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') -SessionDir $d -HistoryRoot "$sk\logs\history"
 ```
-若阶段⑤在新会话执行，先重算 `$d = Get-ChildItem "$sk\logs\history" -Directory | Sort-Object Name -Last 1`，或与阶段④同一会话执行。
+阶段⑤使用本次 `$run` 和 `$d`；跨会话继续时须明确定位对应的会话目录。
 用浏览器打开 `<$d>/final-report.html`，向用户播报释放量、前后对比、恢复脚本位置、
-被跳过/需管理员项、累计战绩。提醒：可恢复区文件 30 天后自动清除。
+被跳过/需管理员项、累计战绩。可恢复区位于本次执行目录内；工具仅在再次使用同一执行目录时检查并清理超过 30 天的隔离内容，不保证定期清除。
 
 ## 参数速查
 

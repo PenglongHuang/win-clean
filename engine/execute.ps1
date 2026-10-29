@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # The ONLY component allowed to delete. Honors per-rule strategy, refuses
 # protected paths, writes an audit log and a one-click restore script.
 param(
@@ -40,6 +40,25 @@ function Get-TreeStats([string]$Path) {
     return @{ files = $files; bytes = $bytes }
 }
 
+function Get-ContentManifest([string]$Path) {
+    $root = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($root.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'reparse-point' }
+    $entries = if ($root.PSIsContainer) { @(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction Stop) } else { @($root) }
+    $manifest = @{}
+    foreach ($entry in $entries) {
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'nested reparse-point' }
+        $relative = if ($root.PSIsContainer) { $entry.FullName.Substring($root.FullName.Length).TrimStart('\') } else { '.' }
+        if ($entry.PSIsContainer) { $manifest[$relative] = 'directory' }
+        else { $manifest[$relative] = 'file:' + (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+    }
+    return $manifest
+}
+function Test-SameManifest($Left, $Right) {
+    if ($Left.Count -ne $Right.Count) { return $false }
+    foreach ($key in $Left.Keys) { if (-not $Right.ContainsKey($key) -or $Left[$key] -ne $Right[$key]) { return $false } }
+    return $true
+}
+
 # Roots that must never be deleted themselves. Rules may clean INSIDE them
 # (e.g. %LOCALAPPDATA%\Temp lives under Users), but the roots are off-limits.
 $script:ProtectedRoots = @(
@@ -64,6 +83,8 @@ function Test-ProtectedPath([string]$Target) {
 # PS 5.1: two-step JSON unwrap
 $scanJson = Get-Content -LiteralPath $ScanFile -Raw -Encoding UTF8 | ConvertFrom-Json
 $selJson  = Get-Content -LiteralPath $SelectionsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+$currentScanHash = (Get-FileHash -LiteralPath $ScanFile -Algorithm SHA256).Hash
+if (-not $selJson.scanHash -or $selJson.scanHash -ne $currentScanHash) { throw 'Selection does not match the current scan. Generate a new report and select again.' }
 $wanted = @($selJson.ids | Where-Object { $_ })
 $byId = @{}; foreach ($f in @($scanJson.findings)) { $byId[$f.id] = $f }
 
@@ -81,7 +102,8 @@ foreach ($id in $wanted) {
         foreach ($p in @($f.paths)) { Write-Log 'skipped-report-only' $id ([string]$p.expanded) $p.bytes 'see report for command' }
         continue
     }
-    if ($f.needs_admin -and -not $scanJson.isAdmin) {
+    $currentAdmin = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($f.needs_admin -and -not $currentAdmin) {
         Write-Log 'skipped' $id '' $f.bytes 'needs-admin'
         continue
     }
@@ -100,7 +122,7 @@ foreach ($id in $wanted) {
             }
             if ($DryRun) {
                 Write-Log ("dryrun-" + $f.strategy) $id $target $p.bytes 'planned'
-                $freed += [int64]$p.bytes
+                if ($f.strategy -eq 'delete-permanent') { $freed += [int64]$p.bytes }
                 continue
             }
             if ($f.strategy -eq 'delete-permanent') {
@@ -127,11 +149,11 @@ foreach ($id in $wanted) {
                         # cross-volume: .NET Move cannot leave the volume. Literal copy
                         # INTO destDir (the new leaf keeps the literal source name),
                         # verify file count + byte sum, and only then delete the source.
+                        $beforeCopy = Get-ContentManifest $target
                         Copy-Item -LiteralPath $target -Destination $destDir -Recurse -Force -ErrorAction Stop
-                        $srcStats = Get-TreeStats $target
-                        $dstStats = Get-TreeStats $dest
-                        if (($srcStats.files -ne $dstStats.files) -or ($srcStats.bytes -ne $dstStats.bytes)) {
-                            Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+                        $copied = Get-ContentManifest $dest
+                        $afterCopy = Get-ContentManifest $target
+                        if (-not (Test-SameManifest $beforeCopy $copied) -or -not (Test-SameManifest $beforeCopy $afterCopy)) {
                             try { [IO.Directory]::Delete($destDir, $false) } catch { }
                             Write-Log 'error' $id $target $p.bytes 'copy-verify-failed'
                             $errorCount++
@@ -148,7 +170,7 @@ foreach ($id in $wanted) {
                 }
                 $manifest += @{ quar = $dest; original = $target }
                 Write-Log 'quarantined' $id $target $p.bytes $result
-                $freed += [int64]$p.bytes
+                # Moving to quarantine preserves data and is not a net space saving.
             }
             else {
                 Write-Log 'skipped' $id $target $p.bytes 'unknown-strategy'
@@ -183,6 +205,25 @@ function Get-Stats([string]`$Path) {
     }
     return @{ files = `$files; bytes = `$bytes }
 }
+function Get-ContentManifest([string]`$Path) {
+    `$root = Get-Item -LiteralPath `$Path -Force -ErrorAction Stop
+    if (`$root.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'reparse-point' }
+    `$entries = if (`$root.PSIsContainer) { @(Get-ChildItem -LiteralPath `$Path -Recurse -Force -ErrorAction Stop) } else { @(`$root) }
+    `$manifest = @{}
+    foreach (`$entry in `$entries) {
+        if (`$entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'nested reparse-point' }
+        `$relative = if (`$root.PSIsContainer) { `$entry.FullName.Substring(`$root.FullName.Length).TrimStart('\') } else { '.' }
+        if (`$entry.PSIsContainer) { `$manifest[`$relative] = 'directory' }
+        else { `$manifest[`$relative] = 'file:' + (Get-FileHash -LiteralPath `$entry.FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+    }
+    return `$manifest
+}
+function Test-SameManifest(`$Left, `$Right) {
+    if (`$Left.Count -ne `$Right.Count) { return `$false }
+    foreach (`$key in `$Left.Keys) { if (-not `$Right.ContainsKey(`$key) -or `$Left[`$key] -ne `$Right[`$key]) { return `$false } }
+    return `$true
+}
+
 foreach (`$m in @(`$moves)) {
     if (`$null -eq `$m) { continue }
     try {
@@ -197,9 +238,11 @@ foreach (`$m in @(`$moves)) {
         else {
             # cross-volume: literal copy into the parent dir, verify, then delete the copy.
             if (Test-Path -LiteralPath `$m.original) { throw ('refusing overwrite: ' + `$m.original) }
+            `$beforeCopy = Get-ContentManifest `$m.quar
             Copy-Item -LiteralPath `$m.quar -Destination `$parent -Recurse -Force -ErrorAction Stop
-            `$s = Get-Stats `$m.quar; `$d = Get-Stats `$m.original
-            if ((`$s.files -ne `$d.files) -or (`$s.bytes -ne `$d.bytes)) { throw ('copy-verify-failed: ' + `$m.original) }
+            `$copied = Get-ContentManifest `$m.original
+            `$afterCopy = Get-ContentManifest `$m.quar
+            if (-not (Test-SameManifest `$beforeCopy `$copied) -or -not (Test-SameManifest `$beforeCopy `$afterCopy)) { throw ('copy-verify-failed: ' + `$m.original) }
             Remove-Item -LiteralPath `$m.quar -Recurse -Force -ErrorAction Stop
         }
         Write-Output ("restored: " + `$m.original)

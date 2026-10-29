@@ -2,44 +2,87 @@
 描述: Windows 深度磁盘清理 Claude skill,规则快扫+Agent 探索双引擎,浏览器可视化勾选,五级安全模型
 提出: 2026-10-18
 阶段: active
-ingenuity: ../ingenuity.md
+ingenuity: ../../ingenuity.md#win-clean
 ---
 
 # win-clean
 
-Claude Code skill：Windows 深度磁盘清理。规则快扫 + Agent 探索双引擎，
-浏览器可视化勾选，五级安全模型，全程可审计、可恢复。
+面向 Windows 的 Claude Code 磁盘空间分析与清理 skill。它扫描内置规则覆盖的目录，在浏览器报告中展示结果，由用户逐项检查并选择，再通过 PowerShell 执行、记录结果。
 
-## 安装
+**先检查再执行。** 清理可能永久删除文件；扫描大小是估算，不保证等于实际释放空间。建议先备份重要资料并使用演练模式。
+
+## 环境要求
+
+- Windows，Windows PowerShell 5.1。
+- 已安装并能使用 Claude Code；报告支持现代 Edge 或 Chrome。
+- Node.js 仅用于开发时运行 JavaScript 测试。部分系统目录需要管理员权限；未经授权的项目会跳过。
+
+## 安装与更新
+
+将仓库下载或克隆到本地，在仓库根目录运行：
 
 ```powershell
-git clone <repo>
-cd win-clean
-powershell -ExecutionPolicy Bypass -File install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+脚本将运行文件复制到 `%USERPROFILE%\.claude\skills\win-clean`。再次运行会更新随项目发布的文件，保留目标目录中的日志和 `rules/learned.json`；已有的技能程序文件会被覆盖。安装后重新启动 Claude Code 以确保加载。
 
 ## 使用
 
-在 Claude Code 中说「C盘满了，帮我清理」或 `/win-clean`。
+在 Claude Code 中输入 `/win-clean`，或说“帮我分析 C 盘空间”。技能会询问扫描范围与模式，执行只读扫描并打开本地报告。查看项目路径与处理方式，调整勾选，确认后返回终端。建议在实际执行前要求 Claude 运行 `-DryRun` 并检查结果。
 
-## 安全模型
+- **快速**：使用内置及已学习规则扫描。
+- **标准**：扫描并核对已知残留。
+- **深度**：在扫描基础上，由 Agent 进一步探索；新规则必须经用户同意才保存。
 
-| 级别 | 内容 | 删除策略 |
-|---|---|---|
-| L1 | pip/npm/conda 等可再生缓存 | 直接删 |
-| L2 | Temp/转储/更新缓存 | 直接删 |
-| L3 | 应用缓存（微信等） | 移入可恢复区（30天） |
-| L4 | 卸载残留/深度发现/休眠文件 | 移入可恢复区，逐项确认（休眠文件 report-only） |
-| L5 | Windows.old/WinSxS 等系统级 | 仅报告命令，不执行 |
+报告的地图和列表展示同一批项目。按盘筛选只改变显示；一个项目可能包含多个磁盘上的路径，勾选该项目会选择它的全部路径。需管理员权限的项目可能被跳过。
 
-- 每次执行产出审计日志（jsonl）与一键恢复脚本
-- 硬编码保护清单（Windows/Program Files/用户目录根）不可越过
-- Claude 自身永不执行删除，删除只经由 execute.ps1
+## 安全与恢复
 
-## 开发
+| 等级 | 常见内容 | 默认处理方式 |
+| --- | --- | --- |
+| L1 | 可再生缓存 | 永久删除，部分规则默认选中 |
+| L2 | 临时文件、更新残留 | 永久删除，部分规则默认选中 |
+| L3 | 应用缓存 | 移入项目的可恢复区，手动选择 |
+| L4 | 深度发现 | 移入可恢复区，每项手动确认 |
+| L5 | 系统级项目 | 仅报告，不由执行器处理 |
 
-```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File tests/run-all.ps1   # PS 套件 (+Node 纯函数)
+实际策略以每条扫描结果为准，`report-only` 项目不执行。L1、L2 的永久删除**无法通过本工具恢复**。L3、L4 使用执行会话目录下的 `quarantine/`，并生成恢复脚本；它不是 Windows 回收站。恢复前请检查目标路径，脚本不会覆盖已重新创建的原路径。
+
+隔离到同一磁盘通常不会立即释放该磁盘空间；跨盘隔离可能占用目标盘空间。执行器仅在再次使用**同一个执行目录**时检查超过 30 天的隔离项目，不提供定时清理保证。浏览器中显示的容量是扫描估算，执行摘要中永久删除的字节数基于扫描数据，不包括移入可恢复区的文件，并非磁盘空间的精确测量。
+
+执行器拒绝磁盘根目录、若干系统与用户根目录，以及 Windows 目录内部的目标，但这不是对所有个人文件的保护。请在报告中检查每条路径；不要把不可信的扫描结果或规则交给执行器。Agent 不应绕过执行器的保护限制。
+
+## 数据和隐私
+
+扫描结果、选择、执行日志、隔离文件及报告保存在技能目录下的 `logs/`。报告服务只绑定本机回环地址，页面和日志可能包含本机用户名、路径和磁盘信息，请检查后再分享。静态报告可离线打开；服务不可用时按页面提示将选择写回终端。
+
+## 目录
+
+```text
+SKILL.md       Agent 的操作流程与安全约束
+engine/        扫描、报告服务、执行及完成报告
+report/        本地报告界面
+rules/         内置规则与用户确认后保存的规则
+tools/         规则校验与学习
+install.ps1    安装或更新技能
+tests/         自动化测试
+docs/          设计文档与原型
 ```
 
-零运行时依赖：仅 Windows PowerShell 5.1；开发期 Node 仅用于 JS 纯函数测试。
+## 开发与验证
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\validate-rules.ps1 -RulesFile .\rules\builtin.json
+node .\tests\test-app.js
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1
+```
+
+完整测试会在系统临时目录创建并删除测试文件，包含对隔离、恢复和清理行为的测试；请勿将真实资料放入测试目录。开发过程中验证真实机器时，使用 `-DryRun`，不要把演练当作实际删除结果。
+
+## 当前限制
+
+- 系统组件目录和大型目录的扫描可能耗时；目前没有扫描超时机制。
+- 恢复脚本和审计日志依赖会话目录仍然存在；请妥善保留。
+- 报告服务验证会话令牌和请求来源，但不能抵御能读取本机报告或控制当前用户会话的恶意程序。
+- 仓库尚未指定开源许可证；发布前需要由维护者选择并添加许可证。

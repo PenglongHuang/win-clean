@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Minimal HTTP server for the selection report. Binds 127.0.0.1:0 (OS-assigned port).
 param(
     [Parameter(Mandatory=$true)][string]$ScanFile,
@@ -13,6 +13,15 @@ function Read-Utf8([string]$Path) { Get-Content -LiteralPath $Path -Raw -Encodin
 
 # -- build the page: inject data, inline app.js for static mode
 $scanJson = Read-Utf8 $ScanFile
+$scanHash = (Get-FileHash -LiteralPath $ScanFile -Algorithm SHA256).Hash
+$randomBytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($randomBytes) } finally { $rng.Dispose() }
+$sessionToken = [BitConverter]::ToString($randomBytes).Replace('-', '').ToLowerInvariant()
+function Escape-JsonForScript([string]$Json) { return $Json.Replace('&', '\u0026').Replace('<', '\u003c').Replace('>', '\u003e') }
+$allowedIds = @{}
+$scanData = $scanJson | ConvertFrom-Json
+foreach ($finding in @($scanData.findings)) { if ($finding.strategy -ne 'report-only') { $allowedIds[[string]$finding.id] = $true } }
 $templatePath = Join-Path $PSScriptRoot '..\report\template.html'
 $appJsPath    = Join-Path $PSScriptRoot '..\report\app.js'
 $html = Read-Utf8 $templatePath
@@ -20,9 +29,11 @@ $mode = 'auto'
 if ($Static) { $mode = 'static' }
 $historyJson = 'null'
 if ($HistoryIndex -and (Test-Path $HistoryIndex)) { $historyJson = Read-Utf8 $HistoryIndex }
-$html = $html.Replace('/*__SCAN_DATA__*/null', $scanJson)
+$html = $html.Replace('/*__SCAN_DATA__*/null', (Escape-JsonForScript $scanJson))
 $html = $html.Replace('/*__MODE__*/''auto''', ("'{0}'" -f $mode))
-$html = $html.Replace('/*__HISTORY__*/null', $historyJson)
+$html = $html.Replace('/*__HISTORY__*/null', (Escape-JsonForScript $historyJson))
+$html = $html.Replace('/*__TOKEN__*/null', ('"' + $sessionToken + '"'))
+$html = $html.Replace('/*__SCAN_HASH__*/null', ('"' + $scanHash + '"'))
 if ($Static) {
     $inline = Read-Utf8 $appJsPath
     $html = $html.Replace('<script src="app.js"></script>', ("<script>`n" + $inline + "`n</script>"))
@@ -66,7 +77,9 @@ function Read-HttpRequest([System.IO.Stream]$s) {
     $bodyLen = [Math]::Max(0, [Math]::Min($cl, $all.Count - $bodyStart))
     $bodyBytes = [byte[]]::new($bodyLen)
     if ($bodyLen -gt 0) { $all.CopyTo($bodyStart, $bodyBytes, 0, $bodyLen) }
-    return @{ Method = $parts[0]; Path = $parts[1]; Body = [Text.Encoding]::UTF8.GetString($bodyBytes) }
+    $headers = @{}
+    foreach ($line in ($head -split "`r`n" | Select-Object -Skip 1)) { if ($line -match '^([^:]+):\s*(.*)$') { $headers[$Matches[1].ToLowerInvariant()] = $Matches[2].Trim() } }
+    return @{ Method = $parts[0]; Path = $parts[1]; Body = [Text.Encoding]::UTF8.GetString($bodyBytes); Headers = $headers }
 }
 
 function Send-HttpResponse([System.IO.Stream]$s, [string]$Type, [string]$Body, [int]$Code = 200) {
@@ -103,19 +116,22 @@ while ($true) {
             '/app.js'  { Send-HttpResponse $stream 'application/javascript' $appJs }
             '/api/select' {
                 try {
+                    if ($req.Method -ne 'POST' -or $req.Headers['x-session-token'] -ne $sessionToken -or $req.Headers['origin'] -ne $url.TrimEnd('/')) { throw 'unauthorized' }
+                    $payload = $req.Body | ConvertFrom-Json
+                    if ($payload.scanHash -ne $scanHash -or $payload.ids -isnot [array] -or @($payload.ids).Count -eq 0) { throw 'invalid selection' }
+                    foreach ($id in @($payload.ids)) { if (-not $allowedIds.ContainsKey([string]$id)) { throw 'unknown or report-only item' } }
                     $req.Body | Set-Content -LiteralPath $SelectionsOut -Encoding UTF8
                     $received = $true
                     Send-HttpResponse $stream 'application/json' '{"ok":true}'
                     Write-Output "SELECTION RECEIVED -> $SelectionsOut"
                 } catch {
-                    Send-HttpResponse $stream 'application/json' ('{"ok":false,"error":"' + $_.Exception.Message + '"}')
+                    Send-HttpResponse $stream 'application/json' '{"ok":false,"error":"invalid request"}' 403
                 }
             }
-            '/shutdown' { Send-HttpResponse $stream 'application/json' '{"ok":true}' }
             default     { Send-HttpResponse $stream 'text/plain' 'not found' 404 }
         }
     } finally { $client.Close() }
-    if ($received -or $req.Path -eq '/shutdown') { break }
+    if ($received) { break }
 }
 $listener.Stop()
 Write-Output 'SERVER DONE'

@@ -33,5 +33,25 @@ else console.log('  ok   squarify contained in bounds');
 // zero-area guard
 eq('squarify zero-safe', 0, app.squarify([], 0, 0, 100, 100).length);
 
+
+
+
+// Bulk selection must never select individually confirmed or report-only findings.
+eq('bulk permits L2', true, app.canBulkSelect({ level: 2, strategy: 'delete' }));
+eq('bulk excludes L4', false, app.canBulkSelect({ level: 4, strategy: 'quarantine' }));
+eq('bulk excludes report only', false, app.canBulkSelect({ level: 2, strategy: 'report-only' }));
+eq('drive path match', true, app.findingOnDrive({paths:[{expanded:'C:\\work\\cache'}]}, 'C:'));
+eq('drive path mismatch', false, app.findingOnDrive({paths:[{expanded:'D:\\work'}]}, 'C:'));
+eq('empty path does not match', false, app.findingOnDrive({paths:[]}, 'C:'));
+function luminance(hex) {
+  const c = hex.match(/[0-9a-f]{2}/gi).map(x => parseInt(x, 16) / 255).map(x => x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+  return c[0] * .2126 + c[1] * .7152 + c[2] * .0722;
+}
+for (const [level, colors] of Object.entries(app.CELL_COLORS)) {
+  const light = luminance(colors.light), dark = luminance(colors.dark);
+  eq(`level ${level} unselected lighter`, true, light > dark);
+  eq(`level ${level} dark text contrast`, true, (light + .05) / (luminance('#111820') + .05) >= 4.5);
+  eq(`level ${level} white text contrast`, true, 1.05 / (dark + .05) >= 4.5);
+}
 console.log(fails === 0 ? '=== test-app: ALL PASSED ===' : `=== test-app: ${fails} FAILED ===`);
 process.exit(fails === 0 ? 0 : 1);

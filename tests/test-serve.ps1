@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
 $root = Join-Path $PSScriptRoot '..'
 $fx = Join-Path $env:TEMP ("wc-serve-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
@@ -7,7 +7,7 @@ New-Item -ItemType Directory -Path $fx -Force | Out-Null
 $scan = [pscustomobject]@{
     timestamp='now'; host='t'; totalBytes=1234; isAdmin=$false
     drives=@([pscustomobject]@{letter='C:'; total=100GB; free=10GB})
-    findings=@([pscustomobject]@{ id='pip-cache'; level=1; name='pip'; type='cache'; strategy='delete-permanent'; desc='d'; auto_select=$true; source='builtin'; bytes=1234; needs_admin=$false
+    findings=@([pscustomobject]@{ id='pip-cache'; level=1; name='pip</script><script>alert(1)</script>'; type='cache'; strategy='delete-permanent'; desc='d'; auto_select=$true; source='builtin'; bytes=1234; needs_admin=$false
         paths=@(@{path='%LOCALAPPDATA%\pip\cache'; expanded='C:\Users\x\pip\cache'; exists=$true; bytes=1234}) })
 }
 $scanFile = "$fx\scan-result.json"
@@ -20,6 +20,7 @@ $selOut = "$fx\selections.json"
 Assert-Equal 0 $LASTEXITCODE 'static mode exits 0'
 Assert-FileContains "$fx\report.html" 'SCAN_DATA' 'static html embeds data marker'
 Assert-FileContains "$fx\report.html" 'squarify' 'static html inlines app.js'
+Assert-FileContains "$fx\report.html" '\u003c/script\u003e' 'scan JSON escapes script terminators'
 
 # -- server mode: full loopback E2E
 $proc = Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',
@@ -39,9 +40,14 @@ try {
     $js = Invoke-WebRequest -UseBasicParsing -Uri ($info.url + 'app.js') -TimeoutSec 5
     Assert-Equal 200 $js.StatusCode 'GET /app.js returns 200'
 
-    $body = '{"ids":["pip-cache"],"ts":"now"}'
+    $hash = (Get-FileHash -LiteralPath $scanFile -Algorithm SHA256).Hash
+    $token = [regex]::Match($html.Content, 'window.SESSION_TOKEN = "([a-f0-9]+)"').Groups[1].Value
+    Assert-True ($token.Length -eq 64) 'session token injected'
+    $body = @{ids=@('pip-cache'); ts='now'; scanHash=$hash} | ConvertTo-Json -Compress
+    try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri ($info.url + 'api/select') -ContentType 'application/json' -Body $body -TimeoutSec 5 | Out-Null; $rejected = $false } catch { $rejected = $true }
+    Assert-True $rejected 'request without token rejected'
     $resp = Invoke-WebRequest -UseBasicParsing -Method Post -Uri ($info.url + 'api/select') `
-        -ContentType 'application/json' -Body $body -TimeoutSec 5
+        -Headers @{Origin=$info.url.TrimEnd('/'); 'X-Session-Token'=$token} -ContentType 'application/json' -Body $body -TimeoutSec 5
     Assert-True ($resp.Content -match '"ok":true') 'POST select ok'
     Assert-FileContains $selOut 'pip-cache' 'selections.json written'
 } finally {

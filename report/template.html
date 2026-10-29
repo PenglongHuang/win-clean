@@ -2,80 +2,56 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>win-clean · 磁盘清理报告</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#14161f; color:#cfd3dc; }
-  header { padding:14px 20px; background:#1b1e2b; border-bottom:1px solid #2a2e3d; display:flex; gap:16px; align-items:baseline; }
-  header h1 { font-size:18px; margin:0; }
-  header .sub { color:#8a8f9e; font-size:12px; }
-  main { padding:16px 20px; max-width:1100px; margin:0 auto; }
-  .stats { display:flex; gap:10px; margin-bottom:14px; }
-  .stat { flex:1; background:#1e2230; border-radius:8px; padding:12px; text-align:center; }
-  .stat b { font-size:22px; display:block; color:#5dd18b; }
-  .stat span { font-size:12px; color:#8a8f9e; }
-  .drive-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
-  .drive-row .drive-track { flex:1; height:8px; background:#2a2e3d; border-radius:4px; overflow:hidden; }
-  .drive-row .drive-fill { height:100%; }
-  #treemap { position:relative; height:420px; background:#1a1d29; border-radius:8px; overflow:hidden; margin-bottom:14px; }
-  .tm-cell { position:absolute; border:1px solid #14161f; box-sizing:border-box; padding:4px; overflow:hidden; cursor:pointer; }
-  .tm-cell:hover { outline:2px solid #fff; }
-  .tm-name { font-size:12px; font-weight:600; color:#10131a; }
-  .tm-size { font-size:11px; color:#10131a; opacity:.8; }
-  .lv-group { background:#1e2230; border-radius:6px; padding:8px 10px; margin-bottom:10px; }
-  .lv-head { font-size:13px; font-weight:600; margin-bottom:6px; }
-  .lv-ops { float:right; font-size:11px; font-weight:400; margin-right:12px; }
-  .lv-ops a { color:#6aa3e8; cursor:pointer; margin-left:8px; }
-  .lv-ops a:hover { text-decoration:underline; }
-  .lv-policy { float:right; font-size:11px; color:#8a8f9e; font-weight:400; }
-  .lv-item { display:flex; gap:10px; align-items:center; padding:4px 0; font-size:13px; border-top:1px solid #2a2e3d; }
-  .lv-item .lv-bytes { margin-left:auto; color:#5dd18b; }
-  .lv-item a { color:#6aa3e8; font-size:12px; }
-  #detail { display:none; position:fixed; inset:0; background:rgba(10,12,18,.6); z-index:50;
-    align-items:center; justify-content:center; }
-  #detail.open { display:flex; }
-  #detail .modal-card { background:#1e2230; border-radius:10px; padding:16px 20px; max-width:640px;
-    width:min(640px, 90vw); max-height:80vh; overflow:auto; box-shadow:0 8px 40px rgba(0,0,0,.5); }
-  #detail h3 { margin:0 0 8px; font-size:15px; }
-  #detail .close-x { float:right; color:#8a8f9e; cursor:pointer; font-size:18px; line-height:1; margin-left:12px; }
-  #detail .close-x:hover { color:#fff; }
-  #detail pre { background:#14161f; padding:8px; border-radius:6px; font-size:11px; overflow:auto; }
-  #detail .warn { color:#e0c55d; }
-  footer { position:fixed; bottom:0; left:0; right:0; background:#1b1e2b; border-top:1px solid #2a2e3d;
-    padding:10px 20px; display:flex; gap:14px; align-items:center; }
-  footer b { color:#5dd18b; font-size:16px; }
-  #submit-btn { background:#3fbf7f; color:#0f1117; border:0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:600; cursor:pointer; }
-  #submit-btn:hover { background:#4ed38d; }
-  #submit-result pre { user-select:all; background:#14161f; padding:8px; max-width:640px; overflow:auto; }
+:root{color-scheme:dark;--ink:#eef1f6;--muted:#b5bfcc;--line:rgba(255,255,255,.11);--panel:rgba(29,35,45,.87);--green:#48d8aa}*{box-sizing:border-box}html{min-height:100%;background:#0b0d13}body{margin:0;color:var(--ink);font:14px/1.5 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;background:radial-gradient(ellipse at 0 0,rgba(21,105,79,.16),transparent 38%),radial-gradient(ellipse at 100% 10%,rgba(36,76,144,.16),transparent 40%),#0b0d13;min-height:100vh;padding:22px 22px 170px}header,main{max-width:1036px;margin:auto}header{position:sticky;top:12px;z-index:10;display:flex;align-items:center;gap:14px;padding:15px 20px;background:rgba(15,19,27,.95);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2)}header h1{font-size:17px;margin:0}header .sub{color:var(--muted);margin-left:auto;font-size:12px}main{padding-top:16px}.stats{display:grid;grid-template-columns:1fr .82fr 1.27fr;gap:14px;margin-bottom:18px}.stat{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;text-align:left;min-width:0}.stat:first-child{background:linear-gradient(130deg,rgba(27,75,61,.6),var(--panel))}.stat b{display:block;font-size:32px;letter-spacing:-.02em;color:var(--green);font-variant-numeric:tabular-nums}.stat span{font-size:13px;color:var(--muted)}.drive-row{display:flex;gap:8px;align-items:center;font-size:12px;margin:5px 0;color:var(--muted)}.drive-row .drive-track{flex:1;height:8px;border-radius:8px;background:#343c49;overflow:hidden}.drive-fill{height:100%;border-radius:8px}.content-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}.toolbar label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.toolbar input{min-width:180px;flex:1;background:#272e39;color:var(--ink);border:1px solid #46505c;border-radius:99px;padding:12px 16px;font:inherit}.toolbar button,#review-confirm{background:#263b39;color:var(--ink);border:1px solid #506b66;border-radius:9px;padding:9px 13px;cursor:pointer}.toolbar button[aria-pressed=true]{background:#137654;border-color:#5ce1b0}#treemap{position:relative;height:300px;background:#252d36;border-radius:12px;overflow:hidden;margin-bottom:20px}.tm-cell{position:absolute;border:3px solid #252d36;box-sizing:border-box;padding:9px;overflow:hidden;cursor:pointer;border-radius:9px;filter:saturate(.65)}.tm-cell.selected{outline:2px solid #fff;outline-offset:-4px}.tm-name,.tm-size{font-size:12px;font-weight:650;color:#111820}.tm-size{font-weight:500}.tm-check{position:absolute;right:5px;top:5px;background:#fff;color:#11392d;border:1px solid #26362f;width:17px;height:17px;border-radius:4px;text-align:center;font-weight:bold;line-height:15px}.lv-group{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0}.lv-head{font-size:14px;font-weight:650;display:flex;flex-wrap:wrap;gap:10px;align-items:center}.lv-policy{font-size:12px;font-weight:400;color:var(--muted);margin-left:auto}.lv-ops{font-size:12px;font-weight:400}.lv-ops a,.lv-item a{color:#a9d0ff;cursor:pointer;margin-left:10px}.lv-item{display:flex;gap:10px;align-items:center;min-height:44px;border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.lv-item input{width:18px;height:18px;accent-color:#29c695}.lv-name{min-width:0;overflow-wrap:anywhere}.lv-bytes{margin-left:auto;color:var(--green);white-space:nowrap}.empty{color:var(--muted)}#detail{display:none;position:fixed;inset:0;background:rgba(4,7,12,.75);z-index:50;align-items:center;justify-content:center;padding:20px}#detail.open{display:flex}#detail .modal-card{width:min(640px,100%);max-height:85vh;overflow:auto;background:#1c2630;border:1px solid #54616c;border-radius:18px;padding:22px;box-shadow:0 20px 60px #0009}#detail h3{margin:0 0 12px}.close-x{float:right;background:none;border:0;color:var(--ink);font-size:19px;cursor:pointer}.modal-card pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111820;padding:12px;border-radius:8px}.warn{color:#f1cb7b}.review-list{max-height:35vh;overflow:auto;line-height:1.9}footer{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:14px;padding:12px 15px 12px 22px;width:min(860px,calc(100% - 32px));background:rgba(31,69,59,.96);border:1px solid rgba(117,217,186,.3);border-radius:99px;box-shadow:0 16px 50px #0009}footer b{color:#6ce7b8}footer a{color:#c9e5dc;font-size:12px}#submit-btn,#review-confirm{margin-left:auto;background:#31ca98;color:#062d21;font-weight:700;border:0;border-radius:99px;padding:12px 24px;cursor:pointer}#submit-result{max-height:20vh;overflow:auto}#submit-result pre{white-space:pre-wrap;overflow-wrap:anywhere} [hidden]{display:none!important}:focus-visible{outline:3px solid #fff;outline-offset:2px}@media(max-width:720px){body{padding:12px 12px 200px}header{top:6px}.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:1/-1}.stat{padding:14px}.stat b{font-size:25px}.content-card{padding:12px}#treemap{height:240px}footer{border-radius:18px;flex-wrap:wrap;gap:8px;padding:12px}#submit-btn{padding:10px 14px}.lv-policy{width:100%;margin:0}.lv-head{gap:5px}}
+ .drive-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 5px}.drive-tabs button{border:1px solid #506b66;background:#202c30;color:#eef1f6;border-radius:99px;padding:8px 16px;cursor:pointer}.drive-tabs button[aria-pressed=true]{background:#169e75;color:#06251a}.drive-note{color:#b5bfcc;font-size:12px;margin:5px 0 16px}
+#treemap{height:auto;background:transparent;overflow:visible}.map-group{margin:0 0 14px}.map-heading{font-weight:650;margin:8px 4px;color:#e5eaf0}.map-area{position:relative;height:112px;overflow:hidden;border-radius:12px;background:#252d36}
+.lv-ops button{border:0;background:transparent;color:#a9d0ff;cursor:pointer;padding:5px 8px}#submit-btn:disabled{opacity:.7;cursor:default}
+
+.tm-cell { filter:none; background:var(--cell-light); }
+.tm-cell.selected { background:var(--cell-dark); }
+.tm-cell.selected .tm-name, .tm-cell.selected .tm-size { color:#fff; }
+.tm-cell[role="button"] { background:var(--cell-light); }
+.selection-summary{border-top:1px solid var(--line);margin-top:20px;padding-top:12px;color:var(--muted)}.selection-summary h3{color:var(--ink);font-size:14px;margin:0 0 8px}.selection-summary p{font-size:12px}.selection-summary div{max-height:150px;overflow:auto}
 </style>
 </head>
 <body>
 <header>
-  <h1>🧹 win-clean 清理报告</h1>
+  <h1>磁盘清理中心</h1>
   <span class="sub" id="scan-ts"></span>
 </header>
 <main>
   <div class="stats">
-    <div class="stat"><b id="stat-releasable">—</b><span>可释放总量</span></div>
+    <div class="stat"><b id="stat-releasable">—</b><span>发现可清理容量</span></div>
     <div class="stat"><b id="stat-count">—</b><span>扫描发现项</span></div>
     <div class="stat" style="flex:2; text-align:left; padding:10px 14px;"><div id="drive-bars"></div></div>
   </div>
+  <div id="drive-tabs" class="drive-tabs" aria-label="筛选磁盘"></div>
+  <p class="drive-note">按磁盘筛选项目；同一项目可能跨盘，选择后会处理其全部路径。</p>
+  <div class="content-card">
+  <div class="toolbar"><label for="search">搜索项目</label><input id="search" type="search" placeholder="输入名称查找"><button id="view-map" aria-pressed="true">显示地图</button><button id="view-list" aria-pressed="false">只看列表</button></div>
   <div id="treemap"></div>
   <div id="level-list"></div>
+  <section class="selection-summary" aria-live="polite"><h3>即将处理</h3><div id="selection-summary"></div><p>预计大小来自扫描结果；移入可恢复区未必会释放空间。</p></section>
+  </div>
 </main>
-<div id="detail"><div class="modal-card" id="detail-card"></div></div>
+<div id="detail"><div class="modal-card" id="detail-card" role="dialog" aria-modal="true" aria-label="项目详情或选择确认"></div></div>
 <footer>
   <span>已选 <b id="sel-count">0 项</b></span>
   <span>合计 <b id="sel-bytes">0 B</b></span>
-  <a href="#" id="sel-all" style="color:#6aa3e8;font-size:12px;">全选</a>
+  <a href="#" id="sel-all" style="color:#6aa3e8;font-size:12px;">选择可批量处理项</a>
   <a href="#" id="sel-none" style="color:#8a8f9e;font-size:12px;">清空</a>
-  <button id="submit-btn">提交清理</button>
+  <button id="submit-btn">开始清理</button>
   <span id="submit-result"></span>
 </footer>
 <script>
 window.SCAN_DATA = /*__SCAN_DATA__*/null;
 window.SERVE_MODE = /*__MODE__*/'auto';
 window.HISTORY = /*__HISTORY__*/null;
+window.SESSION_TOKEN = /*__TOKEN__*/null;
+window.SCAN_HASH = /*__SCAN_HASH__*/null;
 </script>
 <script src="app.js"></script>
 </body>

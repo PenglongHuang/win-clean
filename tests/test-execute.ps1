@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
 $root = Join-Path $PSScriptRoot '..'
 $fx = Join-Path $env:TEMP ("wc-exec-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
@@ -33,9 +33,15 @@ $scan = [pscustomobject]@{
 $scanFile  = "$fx\scan-result.json"
 $selFile   = "$fx\selections.json"
 $scan | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $scanFile -Encoding UTF8
-@{ ids = @('perm-rule','quar-rule','quar2-rule','admin-rule','protect-rule','root-rule','ro-rule') } | ConvertTo-Json | Set-Content -LiteralPath $selFile -Encoding UTF8
+@{ scanHash = (Get-FileHash -LiteralPath $scanFile -Algorithm SHA256).Hash; ids = @('perm-rule','quar-rule','quar2-rule','admin-rule','protect-rule','root-rule','ro-rule') } | ConvertTo-Json | Set-Content -LiteralPath $selFile -Encoding UTF8
 
 try {
+    $badSel = "$fx\bad-selection.json"
+    @{ ids = @('perm-rule'); scanHash = 'OLD-SCAN' } | ConvertTo-Json | Set-Content -LiteralPath $badSel -Encoding UTF8
+    $badProcess = Start-Process powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'engine\execute.ps1'),'-ScanFile',$scanFile,'-SelectionsFile',$badSel,'-HistoryDir',"$fx\bad-history",'-DryRun') -RedirectStandardError "$fx\bad-error.txt" -Wait -PassThru -WindowStyle Hidden
+    Assert-True ($badProcess.ExitCode -ne 0) 'stale selection rejected'
+    Assert-True (Test-Path "$fx\targets\perm\sub\f.bin") 'stale selection leaves file intact'
+
     # -- DryRun first: no fs change
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'engine\execute.ps1') `
         -ScanFile $scanFile -SelectionsFile $selFile -HistoryDir $hist -DryRun | Out-Null
@@ -79,7 +85,7 @@ try {
     # -- exec summary written
     $summary = Get-Content "$hist\exec-summary.json" -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-True ($summary.PSObject.Properties['freedBytes'] -ne $null) 'summary has freedBytes'
-    Assert-Equal 350 $summary.freedBytes 'freedBytes = 100 perm + 250 quar (2 items)'
+    Assert-Equal 100 $summary.freedBytes 'freedBytes excludes quarantined bytes'
     Assert-True ($summary.PSObject.Properties['errorCount'] -ne $null)   'summary has errorCount'
     Assert-Equal 0 $summary.errorCount   'errorCount = 0'
     Assert-Equal 2 $summary.refusedCount 'refusedCount = 2 (protect + drive root)'
@@ -104,7 +110,7 @@ try {
                 paths=@(@{path='XV';expanded="$xv\t";exists=$true;bytes=200}) } ) }
         $xvScanFile = "$fx\xv-scan.json"; $xvSelFile = "$fx\xv-sel.json"
         $xvScan | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $xvScanFile -Encoding UTF8
-        '{"ids":["xvol-rule"]}' | Set-Content -LiteralPath $xvSelFile -Encoding UTF8
+        @{ ids = @('xvol-rule'); scanHash = (Get-FileHash -LiteralPath $xvScanFile -Algorithm SHA256).Hash } | ConvertTo-Json | Set-Content -LiteralPath $xvSelFile -Encoding UTF8
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'engine\execute.ps1') `
             -ScanFile $xvScanFile -SelectionsFile $xvSelFile -HistoryDir $xvHist | Out-Null
         Assert-Equal 0 $LASTEXITCODE 'xvol execute exits 0'

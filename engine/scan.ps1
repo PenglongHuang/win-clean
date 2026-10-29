@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Deterministic rule scan. READ-ONLY: never deletes anything.
 param(
     [string]$RulesDir = (Join-Path $PSScriptRoot '..\rules'),
@@ -84,7 +84,7 @@ if ($ProgressFile) {
 }
 $findings = @()
 foreach ($r in $rules) {
-    $needsAdmin = @($r.guard) -contains 'admin-required' -and -not $isAdmin
+    $needsAdmin = @($r.guard) -contains 'admin-required'
     $pathResults = @()
     $total = [int64]0
     $anyExists = $false

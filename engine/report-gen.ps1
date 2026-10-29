@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Renders the final analysis report (self-contained html) and maintains the history index.
 param(
     [Parameter(Mandatory=$true)][string]$ScanFile,
@@ -76,7 +76,7 @@ $sessions = @($idx.sessions) + @(
     [pscustomobject]@{
         dir = Split-Path -Leaf $SessionDir
         ts = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-        freedBytes = [int64]$finalData.freedBytes
+        freedBytes = if ($finalData.dryRun) { [int64]0 } else { [int64]$finalData.freedBytes }
         reportPath = $reportPath
     }
 )
@@ -90,8 +90,8 @@ $newIdx = [pscustomobject]@{ sessions = $sessions; totalFreed = $totalFreed }
 $tplPath = Join-Path $PSScriptRoot '..\report\final-template.html'
 $appJsPath = Join-Path $PSScriptRoot '..\report\app.js'
 $html = Get-Content -LiteralPath $tplPath -Raw -Encoding UTF8
-$html = $html.Replace('/*__FINAL_DATA__*/null', ($finalData | ConvertTo-Json -Depth 5))
-$html = $html.Replace('/*__HISTORY__*/null', ($newIdx | ConvertTo-Json -Depth 5))
+$html = $html.Replace('/*__FINAL_DATA__*/null', (($finalData | ConvertTo-Json -Depth 5).Replace('&','\u0026').Replace('<','\u003c').Replace('>','\u003e')))
+$html = $html.Replace('/*__HISTORY__*/null', (($newIdx | ConvertTo-Json -Depth 5).Replace('&','\u0026').Replace('<','\u003c').Replace('>','\u003e')))
 $inline = Get-Content -LiteralPath $appJsPath -Raw -Encoding UTF8
 $html = $html.Replace('<script src="app.js"></script>', ("<script>`n" + $inline + "`n</script>"))
 $html | Set-Content -LiteralPath $reportPath -Encoding UTF8

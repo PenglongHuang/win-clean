@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>win-clean · 清理完成报告</title>
 <style>
   :root { color-scheme: dark; }
@@ -25,6 +26,9 @@
   .num { text-align:right; color:#5dd18b; }
   .warn { color:#e0c55d; }
   .session-row { display:flex; gap:12px; padding:6px 0; border-bottom:1px solid #2a2e3d; font-size:13px; }
+
+  body{background:radial-gradient(ellipse at top left,rgba(21,105,79,.18),transparent 38%),#0b0d13;color:#eef1f6;min-height:100vh;padding:22px;font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}
+  header,main{max-width:1036px;margin:auto}header{border:1px solid #333e49;border-radius:16px;background:#111721;padding:17px 20px}header .sub,.stat span{color:#b5bfcc}main{padding:16px 0}.stats{gap:14px}.stat,.panel{background:#1b222b;border:1px solid #343e4a;border-radius:16px;padding:20px}.stat{text-align:left}.stat:first-child{background:linear-gradient(130deg,rgba(27,75,61,.6),#1b222b)}.stat b{font-size:30px;color:#70deb6}.panel h3{font-size:16px}.panel{overflow:auto}td,th{padding:10px 8px}.num{color:#70deb6}@media(max-width:720px){body{padding:12px}.stats{flex-wrap:wrap}.stat{min-width:130px}.panel{padding:14px}table{min-width:500px}}
 </style>
 </head>
 <body>
@@ -57,8 +61,9 @@ window.HISTORY_INDEX = /*__HISTORY__*/null;
   var sessions = [].concat((hist && hist.sessions) || []).slice().reverse();
   document.getElementById('hd-sub').textContent = d.stamp + ' · ' + (d.dryRun ? '演练模式' : '实际执行');
   document.getElementById('st-freed').textContent = fmtBytes(d.freedBytes);
-  document.getElementById('st-total').textContent = fmtBytes((hist && hist.totalFreed) || d.freedBytes);
-  document.getElementById('st-count').textContent = findings.length + ' 项';
+  document.getElementById('st-total').textContent = fmtBytes(hist ? hist.totalFreed : (d.dryRun ? 0 : d.freedBytes));
+  document.getElementById('st-count').textContent = findings.filter(function(f) { return !!f.outcome; }).length + ' 项';
+  if (d.dryRun) { document.querySelector('#st-freed + span').textContent = '演练预计释放（未删除）'; document.querySelector('#st-count + span').textContent = '演练涉及项'; }
 
   var cmp = '';
   drivesAfter.forEach(function (a) {
@@ -66,32 +71,32 @@ window.HISTORY_INDEX = /*__HISTORY__*/null;
     if (!b || !a.total) return;
     var usedB = a.total - b.free, usedA = a.total - a.free;
     var pctB = Math.round(usedB / a.total * 100), pctA = Math.round(usedA / a.total * 100);
-    var freedPct = Math.max(0, Math.round((b.free - a.free) / a.total * 100));
+    var freedPct = Math.max(0, Math.round((a.free - b.free) / a.total * 100));
     cmp += '<div class="bar-row"><span style="width:32px">' + a.letter + '</span>' +
       '<div class="track"><div class="freed" style="width:' + freedPct + '%"></div>' +
       '<div class="before" style="width:' + Math.min(pctB, 100 - freedPct) + '%"></div></div>' +
       '<span>' + pctB + '% → ' + pctA + '%</span></div>';
   });
-  document.getElementById('drive-compare').innerHTML = cmp;
+  document.getElementById('drive-compare').innerHTML = (d.dryRun ? '<p>演练没有清理文件；磁盘空间可能因其他程序发生变化。</p>' : '') + cmp;
 
   var rows = '<table><tr><th>等级</th><th>名称</th><th class="num">大小</th><th>结果</th></tr>';
   findings.forEach(function (f) {
     var m = LEVELS[f.level] || { icon: '?', name: '' };
-    rows += '<tr><td>' + m.icon + ' L' + f.level + ' ' + m.name + '</td><td>' + f.name +
-      '</td><td class="num">' + fmtBytes(f.bytes) + '</td><td>' + (f.outcome || '') + '</td></tr>';
+    rows += '<tr><td>' + m.icon + ' L' + f.level + ' ' + m.name + '</td><td>' + escapeHtml(f.name) +
+      '</td><td class="num">' + fmtBytes(f.bytes) + '</td><td>' + escapeHtml(({ 'dryrun-delete-permanent':'演练：计划删除', 'dryrun-recycle-bin':'演练：计划移入可恢复区', 'deleted':'已删除', 'quarantined':'已移入可恢复区', 'skipped':'已跳过', 'refused':'已拒绝' })[f.outcome] || f.outcome || '未处理') + '</td></tr>';
   });
   rows += '</table>';
   document.getElementById('by-level').innerHTML = rows;
 
   document.getElementById('notes').innerHTML =
-    '恢复脚本：<code>' + (d.restoreFile || '无（无可恢复项）') + '</code><br>' +
-    '审计日志：<code>' + (d.logFile || '—') + '</code>' +
+    '恢复脚本：<code>' + escapeHtml(d.restoreFile || '无（无可恢复项）') + '</code><br>' +
+    '审计日志：<code>' + escapeHtml(d.logFile || '—') + '</code>' +
     (d.dryRun ? '<br>⚠ 本次为演练，未实际删除' : '');
 
   var h = '';
   sessions.forEach(function (s) {
-    h += '<div class="session-row"><span>📅 ' + s.dir + '</span><span class="num">' + fmtBytes(s.freedBytes) +
-      '</span><span>' + s.reportPath + '</span></div>';
+    h += '<div class="session-row"><span>📅 ' + escapeHtml(s.dir) + '</span><span class="num">' + fmtBytes(s.freedBytes) +
+      '</span><span>' + escapeHtml(s.reportPath) + '</span></div>';
   });
   document.getElementById('history').innerHTML = h || '<div class="session-row">首次会话</div>';
 })();
