@@ -7,7 +7,16 @@ ingenuity: ../../ingenuity.md#win-clean
 
 # win-clean
 
-面向 Windows 的 Claude Code 磁盘空间分析与清理 skill。它扫描内置规则覆盖的目录，在浏览器报告中展示结果，由用户逐项检查并选择，再通过 PowerShell 执行、记录结果。
+**让 Claude 帮你找到占空间的文件，在浏览器里看清楚、选好了再清理。**
+
+win-clean 是一个面向 Windows 的 Claude Code skill。它扫描常见缓存、临时文件和应用残留，把结果整理成可交互的磁盘报告；你选择需要处理的项目，Claude 负责后续执行和结果汇总。
+
+- **看得明白**：地图和列表展示项目大小、路径、处理方式，支持搜索和按磁盘筛选。
+- **自己做决定**：按风险分级，深度发现逐项选择；系统级项目只提供参考。
+- **执行有记录**：支持先演练，实际执行后保存日志；可恢复项目提供恢复脚本。
+- **本地扫描与报告**：工具本身不需要配置额外的云服务或 API Key；Claude Code 的数据处理遵循其自身设置。
+
+例如，你可以告诉 Claude：**“C 盘快满了，帮我看看哪些东西占空间。”**
 
 **先检查再执行。** 清理可能永久删除文件；扫描大小是估算，不保证等于实际释放空间。建议先备份重要资料并使用演练模式。
 
@@ -19,9 +28,11 @@ ingenuity: ../../ingenuity.md#win-clean
 
 ## 安装与更新
 
-将仓库下载或克隆到本地，在仓库根目录运行：
+在 PowerShell 中克隆仓库并安装：
 
 ```powershell
+git clone https://github.com/PenglongHuang/win-clean.git
+cd win-clean
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
