@@ -7,67 +7,73 @@ ingenuity: ../../ingenuity.md#win-clean
 ---
 -->
 
-# win-clean
+# win-clean skill
 
-在 Windows 上找出占空间的缓存、临时文件和应用残留，在浏览器里看清路径与处理方式，由你选择要清理的内容。
+### 看清磁盘空间，再决定清理什么
 
-它以 [Agent Skill](https://agentskills.io/specification) 的形式工作：`SKILL.md` 负责引导扫描和执行，PowerShell 脚本处理文件，本地报告展示结果。
+win-clean 帮你找出 Windows 上的缓存、临时文件和应用残留，生成可交互的浏览器报告。你在报告中选择要处理的内容，后续执行和结果汇总由 Skill 完成。
 
-## 安装
+## 为什么用它？
 
-需要 Windows、Windows PowerShell 5.1、Node.js/npm、Git 和可用的 Claude Code。报告建议使用 Edge 或 Chrome。
+- **看得清楚：**按磁盘、体积和风险等级展示发现项，点开就能核对实际路径。
+- **由你选择：**默认从请求推断扫描范围，不必先配置规则；清理内容由你在报告中勾选。
+- **分级处理：**可再生缓存与应用缓存采用不同策略，系统级内容只报告。
+- **留有记录：**保存扫描、选择和执行结果；可恢复项目提供恢复脚本。
 
-在 PowerShell 中运行一条命令，全局安装到 Claude Code：
+## 快速开始
+
+需要 Windows、Windows PowerShell 5.1、Node.js/npm、Git，以及能在本机运行命令的 Agent Skills 兼容客户端。报告建议使用 Edge 或 Chrome。
+
+安装：
 
 ```powershell
-npx skills add PenglongHuang/win-clean -g -a claude-code --copy -y
+npx skills add PenglongHuang/win-clean
 ```
 
-命令会从仓库的 `skills/win-clean/` 安装 Skill。重新打开 Claude Code 后，输入 `/win-clean` 即可使用；描述“C 盘空间不足”等需求时也可能自动调用它。
+安装时由 `skills` CLI 选择目标 Agent。安装完成后，在支持斜杠命令的客户端输入：
 
-**更新：**运行 `npx skills update win-clean -g`。扫描记录与已学习规则保存在 `%LOCALAPPDATA%\win-clean`，与 Skill 安装目录分开。
+```text
+/win-clean
+```
 
-## 使用
+也可以直接说：**“C 盘快满了，帮我看看哪些内容占空间。”**
 
-在 Claude Code 中输入 `/win-clean`，或说“帮我看看 C 盘哪些内容占空间”。Skill 根据你的请求确定扫描范围；未指定盘符时扫描全部固定盘，默认使用标准模式。报告打开后，查看每项的路径、容量估算和处理方式，勾选需要处理的内容并提交选择；后续执行与结果汇总由 Skill 完成。
+上面的命令默认安装到当前项目。希望在所有项目中使用时，加 `-g`；更新已安装版本：`npx skills update win-clean`，全局安装则加 `-g`。详情见 [skills CLI 文档](https://github.com/vercel-labs/skills/blob/main/docs/commands.md)。
 
-- **快速：**按内置及已学习规则扫描。
-- **标准：**额外核对已知应用残留。
-- **深度：**进一步探索规则之外的占用；新规则须经你同意才保存。
+## 使用过程
 
-报告支持按磁盘筛选、搜索和图形化查看。按磁盘筛选只改变显示；一个项目可能覆盖多个磁盘，选中该项目会包含它的全部路径。
+```text
+提出需求 → 扫描磁盘 → 浏览器查看报告 → 勾选并提交 → 查看执行结果
+```
 
-## 清理边界
+未指定盘符时扫描全部固定盘，默认使用标准模式。你也可以在请求中说“快速扫描”或“深度扫描”。报告支持搜索和按磁盘筛选；筛选只改变显示。一个项目可能包含多个磁盘上的路径，勾选该项目会选择它的全部路径。
 
-| 等级 | 内容 | 处理方式 |
+| 等级 | 常见内容 | 处理方式 |
 | --- | --- | --- |
 | L1 | 可再生缓存 | 永久删除；部分规则默认选中 |
 | L2 | 临时文件、更新残留 | 永久删除；部分规则默认选中 |
 | L3 | 应用缓存 | 移入可恢复区；手动选择 |
 | L4 | 深度发现 | 移入可恢复区；逐项确认 |
-| L5 | 系统级项目 | 只报告，不执行 |
+| L5 | 系统级项目 | 仅报告，不执行 |
 
-**请在提交前检查路径。**L1、L2 永久删除后无法通过本工具恢复。L3、L4 的可恢复区位于本次执行目录，并会生成恢复脚本；它不是 Windows 回收站。隔离文件若仍在同一磁盘，通常不会立即释放该磁盘空间。报告中的容量为扫描估算，不等于实际释放量。
+**提交前请核对路径和处理方式。**L1、L2 删除后无法通过本工具恢复。L3、L4 的可恢复区在本次执行目录中，恢复脚本依赖该目录仍然存在。隔离到同一磁盘通常不会立即释放空间；报告容量也是估算，不等于实际释放量。需管理员权限的项目可能被跳过。
 
-扫描、选择、日志和可恢复文件保存在 `%LOCALAPPDATA%\win-clean`。报告只在本机提供服务，但页面和日志可能包含用户名与文件路径，分享前请检查。需管理员权限的项目可能被跳过。
+## 数据与隐私
+
+扫描结果、选择、日志、已学习规则和可恢复文件保存在 `%LOCALAPPDATA%\win-clean`，与 Skill 安装目录分开。报告服务只绑定本机回环地址；页面和日志可能含用户名及本机路径，分享前请检查。
 
 ## 仓库结构
 
 ```text
-skills/win-clean/
-  SKILL.md     工作流程与安全约束
-  engine/      扫描、执行、报告服务
-  report/      浏览器报告界面
-  rules/       内置规则
-  tools/       规则校验与学习
+SKILL.md       工作流程与安全约束
+engine/        扫描、执行和报告服务
+report/        浏览器报告界面
+rules/         内置规则
+tools/         规则校验与学习
 tests/         自动化测试
 docs/          设计资料
 ```
 
-开发验证：
+开发验证：`powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1`。测试只应使用隔离的测试目录，不要放入真实资料。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1
-```
-
-测试只应在隔离的测试目录中运行，**不要将真实资料放入测试目录**。仓库目前未附开源许可证，授权范围以仓库实际文件为准。
+仓库目前未附开源许可证，授权范围以仓库实际文件为准。

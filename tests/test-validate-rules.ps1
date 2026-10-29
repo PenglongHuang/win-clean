@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
-$root = Join-Path $PSScriptRoot '..\skills\win-clean'
+$root = Join-Path $PSScriptRoot '..'
 $tmp = Join-Path $env:TEMP ("wc-test-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 

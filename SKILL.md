@@ -1,6 +1,7 @@
 ---
 name: win-clean
 description: Windows 深度磁盘清理与空间分析。Use when user says C盘满了、磁盘空间不足、清理垃圾、释放空间、深度清理、卸载残留、disk full、free up space、cleanup. 扫描（规则快扫 + Agent 探索）→ 浏览器可视化勾选 → 分级安全执行 → 完整报告与恢复。
+compatibility: Windows、Windows PowerShell 5.1、本机命令执行与浏览器访问
 ---
 
 # win-clean — Windows 深度清理
@@ -9,7 +10,7 @@ description: Windows 深度磁盘清理与空间分析。Use when user says C盘
 
 ## 铁律（不可违反）
 
-1. 你（Claude）**永不直接删除任何文件**。删除只经由 `engine/execute.ps1`。
+1. 运行此 Skill 的 Agent **永不直接删除任何文件**。删除只经由 `engine/execute.ps1`。
 2. L4 深度发现的每一项，必须先在报告页由用户逐项确认。
 3. execute.ps1 拒绝的路径（保护清单命中）不得用其他方式绕过删除。
 4. 探索发现的沉淀规则，必须先征得用户同意再调用 learn-rule。
@@ -47,8 +48,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -Learn
 后台运行扫描，期间每隔几秒读 progress 文件并向用户播报进度（"正在扫描 npm-cache (5/24)…"），完成后播报发现总量。
 
 B. Agent 探索（仅深度档）— 像专家一样狩猎，规则库外的目标：
-1. `du -sh <盘>/* | sort -rh | head -20` 找未知大户
-2. 大户内部再 `du -sh` 钻取两层，识别：已卸载应用残留（对照已安装列表）、
+1. 用 PowerShell 只读统计目标盘的一级目录，按体积找未知大户；不要遍历重解析点。
+2. 对大目录再只读查看至多两层，识别：已卸载应用残留（对照已安装列表）、
    旧安装包/更新残留（`*-updater`、`pending`、`installer.exe`）、异常日志目录、
    重复工具链（同软件多版本目录）
 3. 判断性质：残留→L4；可再生缓存→L1；系统级→L5 报告
@@ -64,7 +65,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$run\scan-result.json" -SelectionsOut "$run\selections.json" -HistoryIndex "$data\history\index.json"
 ```
-用后台方式启动（如 Bash run_in_background），等待 `"$run\serve-info.json"` 出现后读取 URL，
+使用当前 Agent 支持的后台任务方式启动，等待 `"$run\serve-info.json"` 出现后读取 URL，
 让用户在浏览器打开并勾选。轮询 `"$run\selections.json"` 出现（最多 15 分钟）。
 超时未提交 → 读取 serve-info.json 的 pid 并 `Stop-Process -Id <pid>`，询问用户取消还是降级静态模式。
 

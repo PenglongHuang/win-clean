@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
-$root = Join-Path $PSScriptRoot '..\skills\win-clean'
+$root = Join-Path $PSScriptRoot '..'
 $fx = Join-Path $env:TEMP ("wc-fx-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'fixtures\make-fixture.ps1') -Root $fx
 
