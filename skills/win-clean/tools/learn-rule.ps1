@@ -2,6 +2,7 @@
 # Appends a Claude-exploration discovery to learned.json (user must have approved it first).
 param(
     [Parameter(Mandatory=$true)][string]$RulesDir,
+    [string]$LearnedFile,
     [Parameter(Mandatory=$true)][string]$Id,
     [Parameter(Mandatory=$true)][ValidateRange(1,5)][int]$Level,
     [Parameter(Mandatory=$true)][string]$Name,
@@ -22,7 +23,9 @@ $Paths = @($Paths | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim(
 # NOTE: name it $autoSel -- $autoSelect would case-insensitively collide with $AutoSelect.
 $autoSel = ([string]$AutoSelect) -ieq 'true' -or ([string]$AutoSelect) -eq '1' -or ($AutoSelect -eq $true)
 
-$learnedPath = Join-Path $RulesDir 'learned.json'
+$learnedPath = if ($LearnedFile) { $LearnedFile } else { Join-Path $RulesDir 'learned.json' }
+$learnedParent = Split-Path -Parent $learnedPath
+if (-not (Test-Path -LiteralPath $learnedParent)) { New-Item -ItemType Directory -Path $learnedParent -Force | Out-Null }
 $learned = @()
 if (Test-Path $learnedPath) {
     # PS 5.1: ConvertFrom-Json emits a JSON array as ONE pipeline object; two-step unwrap

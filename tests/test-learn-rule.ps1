@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
-$root = Join-Path $PSScriptRoot '..'
+$root = Join-Path $PSScriptRoot '..\skills\win-clean'
 $fx = Join-Path $env:TEMP ("wc-lr-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $fx -Force | Out-Null
 Copy-Item (Join-Path $root 'rules\builtin.json') $fx
@@ -15,6 +15,12 @@ Assert-Equal 0 $LASTEXITCODE 'learn-rule exits 0'
 $learnedJson = Get-Content (Join-Path $fx 'learned.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $learned = @($learnedJson)
 Assert-Equal 1 $learned.Count 'one learned rule appended'
+$externalLearned = Join-Path $fx 'user-data\rules\learned.json'
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tools\learn-rule.ps1') `
+    -RulesDir $fx -LearnedFile $externalLearned -Id external-rule -Level 3 -Name 'external' -Paths 'D:\external' `
+    -Type cache -Desc 'external data path' | Out-Null
+Assert-Equal 0 $LASTEXITCODE 'external learned rule saved'
+Assert-True (Test-Path -LiteralPath $externalLearned) 'external learned file created'
 Assert-Equal 'learned' $learned[0].source 'source is learned'
 Assert-Equal 'recycle-bin' $learned[0].strategy 'level4 -> recycle-bin auto'
 Assert-True ($learned[0].discovered -is [string] -and $learned[0].discovered.Length -gt 0) 'discovered timestamp set'

@@ -2,12 +2,14 @@
 # Deterministic rule scan. READ-ONLY: never deletes anything.
 param(
     [string]$RulesDir = (Join-Path $PSScriptRoot '..\rules'),
+    [string]$LearnedFile,
     [string]$OutFile  = (Join-Path (Get-Location) 'scan-result.json'),
     [string[]]$OnlyIds,
     [string]$Drives,
     [string]$ProgressFile
 )
 $ErrorActionPreference = 'Stop'
+if (-not $LearnedFile) { $LearnedFile = Join-Path $RulesDir 'learned.json' }
 
 # PS 5.1 quirk: via `powershell -File`, a comma-separated -OnlyIds a,b,c binds as ONE
 # string (no expression parsing). Normalize: split every element on ',' and trim.
@@ -60,7 +62,7 @@ function Get-PathBytes([string]$Path) {
 # -- merge rule libraries (learned wins on same id). PS 5.1: two-step unwrap.
 $builtinJson = Get-Content -LiteralPath (Join-Path $RulesDir 'builtin.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $builtin = @($builtinJson)
-$learnedFile = Join-Path $RulesDir 'learned.json'
+$learnedFile = $LearnedFile
 $learned = @()
 if (Test-Path $learnedFile) {
     $learnedJson = Get-Content -LiteralPath $learnedFile -Raw -Encoding UTF8 | ConvertFrom-Json

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\assert.ps1"
-$root = Join-Path $PSScriptRoot '..'
+$root = Join-Path $PSScriptRoot '..\skills\win-clean'
 $fx = Join-Path $env:TEMP ("wc-fx-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'fixtures\make-fixture.ps1') -Root $fx
 
@@ -61,6 +61,13 @@ try {
     Assert-Equal 512   $byId['user-temp'].bytes          'user-temp size 512'
     Assert-Equal 2048  $byId['uv-cache'].bytes           'learned override wins'
     Assert-Equal 'learned' $byId['uv-cache'].source      'source is learned'
+    $externalLearned = Join-Path $fx 'user-data\rules\learned.json'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $externalLearned) -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $rules 'learned.json') -Destination $externalLearned
+    $externalOut = Join-Path $fx 'scan-external-rules.json'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $scanPs1 -RulesDir $rules -LearnedFile $externalLearned -OutFile $externalOut -OnlyIds uv-cache | Out-Null
+    $externalScan = Get-Content -LiteralPath $externalOut -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-Equal 2048 @($externalScan.findings)[0].bytes 'external learned rules loaded'
     Assert-Equal 256   $byId['vscode-vsix-cache'].bytes  'vsix cache size 256'
     # -- junction traversal: reparse point inside pip\cache must not be followed
     $jn = Join-Path $fx 'Local\pip\cache\loop-junction'

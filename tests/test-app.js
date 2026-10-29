@@ -1,5 +1,5 @@
 const path = require('path');
-const app = require(path.join(__dirname, '..', 'report', 'app.js'));
+const app = require(path.join(__dirname, '..', 'skills', 'win-clean', 'report', 'app.js'));
 
 let fails = 0;
 function eq(label, expected, actual) {

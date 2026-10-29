@@ -11,23 +11,21 @@ ingenuity: ../../ingenuity.md#win-clean
 
 在 Windows 上找出占空间的缓存、临时文件和应用残留，在浏览器里看清路径与处理方式，由你选择要清理的内容。
 
-它以 [Agent Skill](https://agentskills.io/specification) 的形式工作：`SKILL.md` 负责引导扫描和执行，PowerShell 脚本处理文件，本地报告展示结果。适用于 Claude Code，当前提供 PowerShell 安装脚本。
+它以 [Agent Skill](https://agentskills.io/specification) 的形式工作：`SKILL.md` 负责引导扫描和执行，PowerShell 脚本处理文件，本地报告展示结果。
 
 ## 安装
 
-需要 Windows、Windows PowerShell 5.1、Git 和可用的 Claude Code。报告建议使用 Edge 或 Chrome。**普通使用无需 Node.js 或额外 API Key。**
+需要 Windows、Windows PowerShell 5.1、Node.js/npm、Git 和可用的 Claude Code。报告建议使用 Edge 或 Chrome。
 
-在 PowerShell 中运行：
+在 PowerShell 中运行一条命令，全局安装到 Claude Code：
 
 ```powershell
-git clone https://github.com/PenglongHuang/win-clean.git
-cd win-clean
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+npx skills add PenglongHuang/win-clean -g -a claude-code --copy -y
 ```
 
-安装脚本将 Skill 放到 `%USERPROFILE%\.claude\skills\win-clean`。重新打开 Claude Code 后，输入 `/win-clean` 即可使用。Claude Code 也可能在你描述“C 盘空间不足”等需求时自动调用它。
+命令会从仓库的 `skills/win-clean/` 安装 Skill。重新打开 Claude Code 后，输入 `/win-clean` 即可使用；描述“C 盘空间不足”等需求时也可能自动调用它。
 
-**更新：**在克隆目录运行 `git pull`，再运行 `install.ps1`。安装脚本会更新程序文件，保留目标目录中的日志与已学习规则；运行前可先查看脚本内容。
+**更新：**运行 `npx skills update win-clean -g`。扫描记录与已学习规则保存在 `%LOCALAPPDATA%\win-clean`，与 Skill 安装目录分开。
 
 ## 使用
 
@@ -51,17 +49,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 **请在提交前检查路径。**L1、L2 永久删除后无法通过本工具恢复。L3、L4 的可恢复区位于本次执行目录，并会生成恢复脚本；它不是 Windows 回收站。隔离文件若仍在同一磁盘，通常不会立即释放该磁盘空间。报告中的容量为扫描估算，不等于实际释放量。
 
-扫描、选择、日志和可恢复文件保存在安装目录的 `logs/` 中。报告只在本机提供服务，但页面和日志可能包含用户名与文件路径，分享前请检查。需管理员权限的项目可能被跳过。
+扫描、选择、日志和可恢复文件保存在 `%LOCALAPPDATA%\win-clean`。报告只在本机提供服务，但页面和日志可能包含用户名与文件路径，分享前请检查。需管理员权限的项目可能被跳过。
 
 ## 仓库结构
 
 ```text
-SKILL.md       Skill 工作流程与安全约束
-install.ps1    安装与更新
-engine/        扫描、执行、报告服务
-report/        浏览器报告界面
-rules/         内置规则
-tools/         规则校验与学习
+skills/win-clean/
+  SKILL.md     工作流程与安全约束
+  engine/      扫描、执行、报告服务
+  report/      浏览器报告界面
+  rules/       内置规则
+  tools/       规则校验与学习
 tests/         自动化测试
 docs/          设计资料
 ```

@@ -22,11 +22,11 @@ description: Windows 深度磁盘清理与空间分析。Use when user says C盘
 
 ## 路径约定
 
-本文档中所有相对路径（engine/、tools/、rules/、logs/）均以本技能根目录
+本文档中代码相对路径（engine/、tools/、rules/）均以本技能根目录
 （SKILL.md 所在目录）为基准。执行命令前先解析为绝对路径，例如：
 `$sk = "<本技能根目录的绝对路径>"`，然后所有命令写为 `powershell ... -File "$sk\engine\scan.ps1"`。
-每次运行都创建独立会话目录，避免读取上次的选择或覆盖历史：
-`$run = Join-Path "$sk\logs\runs" ([guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $run -Force | Out-Null`。
+用户数据放在 `$env:LOCALAPPDATA\win-clean`，不写入 Skill 安装目录，以免更新时覆盖日志和已学习规则。每次运行都创建独立会话目录：
+`$data = Join-Path $env:LOCALAPPDATA 'win-clean'; $run = Join-Path (Join-Path $data 'runs') ([guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $run -Force | Out-Null`。
 `$run` 保持在同一会话中，并用于本次扫描、选择和执行。
 
 ## 阶段① 开始：概况与档位
@@ -40,7 +40,7 @@ Get-PSDrive -PSProvider FileSystem | Select Name,Used,Free
 
 A. 快扫（所有档位必跑）：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$run\scan-result.json" -ProgressFile "$run\scan-progress.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -LearnedFile "$data\rules\learned.json" -OutFile "$run\scan-result.json" -ProgressFile "$run\scan-progress.json"
 ```
 用户指定盘符时，在命令末尾加 `-Drives "C,D"`（替换为实际盘符）；不传 `-Drives` 扫全部固定盘。
 
@@ -55,14 +55,14 @@ B. Agent 探索（仅深度档）— 像专家一样狩猎，规则库外的目�
 4. 每个发现向用户播报："发现 X（大小，路径，判断依据，建议等级）"
 5. 用户同意后沉淀：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -RulesDir "$sk\rules" -Id <kebab-id> -Level <1-5> -Name "<名>" -Paths "<绝对路径>" -Type <cache|temp|leftover|installer|log|dump|system> -Desc "<判断依据>"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\tools\learn-rule.ps1" -RulesDir "$sk\rules" -LearnedFile "$data\rules\learned.json" -Id <kebab-id> -Level <1-5> -Name "<名>" -Paths "<绝对路径>" -Type <cache|temp|leftover|installer|log|dump|system> -Desc "<判断依据>"
 ```
 沉淀后重跑快扫，新规则即入报告。
 
 ## 阶段③ 报告与勾选
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$run\scan-result.json" -SelectionsOut "$run\selections.json" -HistoryIndex "$sk\logs\history\index.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\serve.ps1" -ScanFile "$run\scan-result.json" -SelectionsOut "$run\selections.json" -HistoryIndex "$data\history\index.json"
 ```
 用后台方式启动（如 Bash run_in_background），等待 `"$run\serve-info.json"` 出现后读取 URL，
 让用户在浏览器打开并勾选。轮询 `"$run\selections.json"` 出现（最多 15 分钟）。
@@ -83,7 +83,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\execute.ps1" -Sc
 ## 阶段⑤ 最终报告
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" -ScanFile "$run\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') -SessionDir $d -HistoryRoot "$sk\logs\history"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" -ScanFile "$run\scan-result.json" -ExecSummaryFile (Join-Path $d 'exec-summary.json') -SessionDir $d -HistoryRoot "$data\history"
 ```
 阶段⑤使用本次 `$run` 和 `$d`；跨会话继续时须明确定位对应的会话目录。
 用浏览器打开 `<$d>/final-report.html`，向用户播报释放量、前后对比、恢复脚本位置、
@@ -91,6 +91,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\report-gen.ps1" 
 
 ## 参数速查
 
-scan.ps1: -RulesDir -OutFile -OnlyIds -Drives -ProgressFile ｜ serve.ps1: -ScanFile -SelectionsOut -HistoryIndex -Static -OutHtml
+scan.ps1: -RulesDir -LearnedFile -OutFile -OnlyIds -Drives -ProgressFile ｜ serve.ps1: -ScanFile -SelectionsOut -HistoryIndex -Static -OutHtml
 execute.ps1: -ScanFile -SelectionsFile -HistoryDir -DryRun ｜ report-gen.ps1: -ScanFile -ExecSummaryFile -SessionDir -HistoryRoot
-learn-rule.ps1: -RulesDir -Id -Level -Name -Paths -Type -Desc -AutoSelect
+learn-rule.ps1: -RulesDir -LearnedFile -Id -Level -Name -Paths -Type -Desc -AutoSelect
