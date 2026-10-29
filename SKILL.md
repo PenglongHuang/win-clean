@@ -34,19 +34,15 @@ description: Windows 深度磁盘清理与空间分析。Use when user says C盘
 ```
 Get-PSDrive -PSProvider FileSystem | Select Name,Used,Free
 ```
-向用户展示各盘紧张度，给出三档选择：
-- ⚡快速档：只跑快扫（L1+L2 默认勾选即可执行）
-- 🎯标准档：快扫 + 已知残留核对（learned.json 全量）
-- 🔬深度档：快扫 + Agent 探索（见阶段②B）
-- 盘位选择：问用户要扫哪些盘，默认全部固定盘；把盘符列表传给 scan.ps1 的 -Drives 参数（如 `-Drives "C,D"`）
+展示各盘空间概况后直接开始扫描，不要求用户先选档位或盘位。用户明确提到盘符时只扫指定盘；否则扫全部固定盘。默认使用标准档（快扫 + 已知残留核对）；用户明确要求快速或深度时，分别只跑快扫或增加阶段②B 的探索。用户只需在报告中选择清理内容。
 
 ## 阶段② 扫描
 
 A. 快扫（所有档位必跑）：
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$run\scan-result.json" -Drives "<用户选择的盘符>" -ProgressFile "$run\scan-progress.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$sk\engine\scan.ps1" -OutFile "$run\scan-result.json" -ProgressFile "$run\scan-progress.json"
 ```
-（两个新参数默认可省略：不传 -Drives 扫全部固定盘，不传 -ProgressFile 不写进度文件。）
+用户指定盘符时，在命令末尾加 `-Drives "C,D"`（替换为实际盘符）；不传 `-Drives` 扫全部固定盘。
 
 后台运行扫描，期间每隔几秒读 progress 文件并向用户播报进度（"正在扫描 npm-cache (5/24)…"），完成后播报发现总量。
 
