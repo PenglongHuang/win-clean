@@ -2,3 +2,5 @@ logs/
 *.local.json
 .superpowers/
 node_modules/
+tests/product-fixture-*/
+dist/

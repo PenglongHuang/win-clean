@@ -6,7 +6,8 @@ param(
     [string]$OutFile  = (Join-Path (Get-Location) 'scan-result.json'),
     [string[]]$OnlyIds,
     [string]$Drives,
-    [string]$ProgressFile
+    [string]$ProgressFile,
+    [string]$CancelFile
 )
 $ErrorActionPreference = 'Stop'
 if (-not $LearnedFile) { $LearnedFile = Join-Path $RulesDir 'learned.json' }
@@ -51,9 +52,13 @@ function Get-PathBytes([string]$Path) {
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return 0 }
     if (-not $item.PSIsContainer) { return [int64]$item.Length }
     $sum = [int64]0
-    foreach ($f in (Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue)) {
-        if (-not $f.PSIsContainer -and -not ($f.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            $sum += $f.Length
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($Path)
+    while ($pending.Count -gt 0) {
+        if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { break }
+        foreach ($f in @(Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction SilentlyContinue)) {
+            if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            if ($f.PSIsContainer) { $pending.Push($f.FullName) } else { $sum += $f.Length }
         }
     }
     return $sum
@@ -86,6 +91,7 @@ if ($ProgressFile) {
 }
 $findings = @()
 foreach ($r in $rules) {
+    if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { break }
     $needsAdmin = @($r.guard) -contains 'admin-required'
     $pathResults = @()
     $total = [int64]0

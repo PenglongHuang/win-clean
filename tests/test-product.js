@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const m = require('../report/product-model.js');
+const fs = [{id:'a',bytes:40,strategy:'delete-permanent',needs_admin:false,level:1,name:'cache'}, {id:'b',bytes:100,strategy:'recycle-bin',level:3,name:'app'}, {id:'c',bytes:900,strategy:'report-only',level:5,name:'system'}, {id:'d',bytes:60,strategy:'delete-permanent',needs_admin:true,level:2,name:'admin'}];
+assert.deepEqual(m.totals(fs, ['a','b','c','d']), {release:40,quarantine:100,admin:60,count:3});
+assert.equal(m.selectable(fs[2]),false);
+assert.deepEqual(m.visible(fs,'', 'all').map(f=>f.id), ['c','b','d','a']);
+assert.deepEqual(m.visible(fs,'CACHE','all').map(f=>f.id), ['a']);
+assert.deepEqual(m.visible(fs,'','recommended').map(f=>f.id), ['a']);
+console.log('product model passed');
+const dirs=[{path:'B:\\',bytes:30,parent:''},{path:'B:\\app',bytes:20,parent:'B:\\'},{path:'B:\\app\\child',bytes:20,parent:'B:\\app'},{path:'B:\\docs',bytes:10,parent:'B:\\'}];
+assert.deepEqual(m.directoryRows(dirs,['B:\\'],'').map(x=>x.path),['B:\\app','B:\\docs']);
+assert.deepEqual(m.directoryRows(dirs,['B:\\'],'B:\\app').map(x=>x.path),['B:\\app\\child']);
+const overlap=[{id:'parent',bytes:100,strategy:'delete-permanent',paths:[{expanded:'B:\\cache',bytes:100,exists:true}]},{id:'child',bytes:40,strategy:'delete-permanent',paths:[{expanded:'B:\\cache\\data',bytes:40,exists:true}]}];
+assert.equal(m.totals(overlap,['parent','child']).release,100);
+const small=[{path:'B:/',parent:'',bytes:100,directBytes:10},{path:'B:/big',parent:'B:/',bytes:80}];
+assert.deepEqual(m.directorySummary(small,['B:/'],''),{total:100,direct:10,other:10});
